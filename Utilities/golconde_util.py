@@ -227,7 +227,7 @@ def createTrigger(options, cursor):
 	triggerFunction.append(')\n')
 	# End Delete Logic
 
-  # End of Trigger Function	
+	# End of Trigger Function	
 	triggerFunction.append('\n\nquery = "SELECT golconde.addstatement($$%s$$)" % sql\nplpy.execute(query)\n$BODY$\nLANGUAGE \'plpythonu\' VOLATILE\nCOST 100;')
 	
 	# Assemble the Trigger Function SQL
