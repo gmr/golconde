@@ -159,7 +159,6 @@ def createTrigger(options, cursor):
 		if row[5] == 't':
 			pkCount += 1
 	
-	print "Found %i primary key columns" % pkCount
 	
 	# Update logic
 
