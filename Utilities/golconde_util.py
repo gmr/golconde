@@ -150,7 +150,6 @@ def createTrigger(options, cursor):
 		if x < rowCount:
 			triggerFunction.append(',')
 	triggerFunction.append(')\n')
-	
 	# End Insert Logic
 
 	# Count the primary keys
@@ -159,9 +158,7 @@ def createTrigger(options, cursor):
 		if row[5] == 't':
 			pkCount += 1
 	
-	
 	# Update logic
-
 	triggerFunction.append("\nif TD['event'] == 'UPDATE':\n")
 	triggerFunction.append("\tsql = \"UPDATE %s.%s SET " % (options.schema, options.table))
 
@@ -201,7 +198,6 @@ def createTrigger(options, cursor):
 				triggerFunction.append(',')
 
 	triggerFunction.append(')\n')
-
 	# End Update Logic
 	
 	# Delete Logic
@@ -229,7 +225,6 @@ def createTrigger(options, cursor):
 				triggerFunction.append(',')
 
 	triggerFunction.append(')\n')
-	
 	# End Delete Logic
 
   # End of Trigger Function	
