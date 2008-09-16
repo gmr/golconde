@@ -17,12 +17,12 @@ def main():
 	description = "Golconde command line utility to manage PostgreSQL origin server"
 
 	# Create our parser and setup our command line options
-	parser = optparse.OptionParser(usage=usage,version=version,description=description)
+	parser = optparse.OptionParser(usage=usage,version=version,description=description,conflict_handler='resolve')
 	parser.add_option('--dbname', '-d', help='specify database name to connect to')
-	parser.add_option('--schema', '-n', default='public', help='schema name to act upon')
+	parser.add_option('--schema', '-n', default='public', help='schema name to act upon (default: public)')
 	parser.add_option('--table', '-t', help='table name to act upon')
 	dbGroup = OptionGroup(parser, 'PostgreSQL Connection options')
-	dbGroup.add_option('--host', '-H', default='localhost', help='database server host or socket directory (default: localhost)')
+	dbGroup.add_option('--host', '-h', default='localhost', help='database server host or socket directory (default: localhost)')
 	dbGroup.add_option('--port', '-p', type='int', default=5432, help='database server port (default: 5432)')
 	dbGroup.add_option('--user', '-u', default='postgres', help='database user name (default: postgres)')
 	dbGroup.add_option('-W', action="store_true", default=False, help='force password prompt (should happen automatically)')
@@ -30,6 +30,13 @@ def main():
 	group = OptionGroup(parser, 'Golconde actions')
 	group.add_option('--add', '-a', action="store_true", help='add the golconde trigger to a table for distribution')
 	group.add_option('--remove' , '-r', action="store_true", help='remove galconde trigger from table to stop distribution')
+
+	group.add_option('--queue', '-o', action="store_true", help='use an ActiveMQ Queue for a single consumer/client server')
+	group.add_option('--topic' , '-m', action="store_true", help='use an ActiveMQ Topic for multiple consumers/client servers')
+
+	group.add_option('--static', '-s', action="store_true", help='Use staticly compiled connection data for talking to ActiveMQ')
+	group.add_option('--dynamic' , '-y', action="store_true", help='Use the golconde.settings table to specify connection data')
+
 	parser.add_option_group(group)	
 	
 	# Parse the command line options
@@ -42,6 +49,14 @@ def main():
 		
 	if not options.add and not options.remove:
 		print "Error: You must specify an action to perform"
+		sys.exit()
+
+	if options.add and not options.queue and not options.topic:
+		print "Error: You must specify the use of single queue or a topic for publishing data"
+		sys.exit()
+
+	if options.add and not options.static and not options.dynamic:
+		print "Error: You must specify if you would like to use a statically compiled function or dynamic obtained connection data from golconde.settings for connecting to ActiveMQ"
 		sys.exit()
 
 	if not options.table:
@@ -228,7 +243,22 @@ def createTrigger(options, cursor):
 	# End Delete Logic
 
 	# End of Trigger Function	
-	triggerFunction.append('\n\nquery = "SELECT golconde.addstatement($$%s$$)" % sql\nplpy.execute(query)\n$BODY$\nLANGUAGE \'plpythonu\' VOLATILE\nCOST 100;')
+	triggerFunction.append('\n\nquery = "SELECT golconde.add_')
+	
+	# Build the center parts of the function name to call based upon our options
+	if options.queue:
+		triggerFunction.append('queue_')
+	elif options.topic:
+		triggerFunction.append('topic_')
+
+	if options.static:
+		triggerFunction.append('static_')
+	elif options.dynamic:
+		triggerFunction.append('dynamic_')
+	
+	# Add the rest of the trigger function
+	triggerFunction.append('statement(\'%s.%s\'::text,' % (options.schema, options.table))
+	triggerFunction.append('$$%s$$)" % sql\nplpy.execute(query)\n$BODY$\nLANGUAGE \'plpythonu\' VOLATILE\nCOST 100;')
 	
 	# Assemble the Trigger Function SQL
 	query = ''.join(triggerFunction)
@@ -236,8 +266,7 @@ def createTrigger(options, cursor):
 	# Create the Trigger Function
 	print "Creating trigger function: %s.%s_trigger_function()" % ( options.schema, options.table )
 	cursor.execute(query)
-	
-	
+		
 	# Create the Trigger
 	print "Creating trigger: %s.%s_trigger" % ( options.schema, options.table )
 	trigger = "CREATE TRIGGER %s_trigger AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH ROW EXECUTE PROCEDURE %s.%s_trigger_function();" % ( options.table, options.schema, options.table, options.schema, options.table)
