@@ -10,18 +10,24 @@ from optparse import OptionGroup
 from pyactivemq import ActiveMQConnectionFactory
 from pyactivemq import AcknowledgeMode
 
+# ActiveMQ Listener Class
+#
+# @todo Add exception handling
 class TextListener(pyactivemq.MessageListener):
 	def __init__(self):
 		pyactivemq.MessageListener.__init__(self)
 
+	# We we get a message, process it
 	def onMessage(self, message):
-		self.cursor.execute(message.text)
 		if self.verbose:
-			print 'Message: %s' % message.text
+			print 'Query to execute: %s' % message.text
+		self.cursor.execute(message.text)
 
+	# Let the process pass in the cursor for the database
 	def setCursor(self, cursor):
 		self.cursor = cursor
 	
+	# How verbose are we?
 	def setVerbose(self, verbose):
 		self.verbose = verbose
 
@@ -30,7 +36,7 @@ def main():
 	# Set our various display values for our Option Parser
 	usage = "usage: %prog [options]"
 	version = "%prog 0.1"
-	description = "Golconde command line daemon to listen on a "
+	description = "Golconde command line daemon to listen to a single topic or queue in ActiveMQ"
 
 	# Create our parser and setup our command line options
 	parser = optparse.OptionParser(usage=usage,version=version,description=description,conflict_handler='resolve')
