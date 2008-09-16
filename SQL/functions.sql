@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION golconde.add_queue_static_statement(IN tablename text, IN statement text) RETURNS bool AS
 $$
-# @summary Golconde Function to insert statement into a queue - a simple test
+# @summary Golconde Function to insert statement into a queue using a statically defined connect string.  Change it if you need it to connect somewhere else.
 # @since 2008-09-15
 # @author: Gavin M. Roy <gmr@myyearbook.com>
 
@@ -29,7 +29,7 @@ $$ LANGUAGE plpythonu;
 
 CREATE OR REPLACE FUNCTION golconde.add_topic_static_statement(IN tablename text, IN statement text) RETURNS bool AS
 $$
-# @summary Golconde Function to insert statement into a queue - a simple test
+# @summary Golconde Function to insert statement into a topic using a statically defined connect string.  Change it if you need it to connect somewhere else.
 # @since 2008-09-15
 # @author: Gavin M. Roy <gmr@myyearbook.com>
 
@@ -58,7 +58,8 @@ $$ LANGUAGE plpythonu;
 
 CREATE OR REPLACE FUNCTION golconde.add_queue_dynamic_statement(IN tablename text, IN statement text) RETURNS bool AS
 $$
-# @summary Golconde Function to insert statement into a queue - a simple test
+# @summary Golconde  Golconde Function to insert statement into a queue using a table stored connect string.
+# Renamed from golconde.addstatement(IN statement text)
 # @since 2008-08-31
 # @author: Gavin M. Roy <gmr@myyearbook.com>
 
@@ -87,7 +88,7 @@ $$ LANGUAGE plpythonu;
 
 CREATE OR REPLACE FUNCTION golconde.add_topic_dynamic_statement(IN tablename text, IN statement text) RETURNS bool AS
 $$
-# @summary Golconde Function to insert statement into a queue - a simple test
+# @summary Golconde  Golconde Function to insert statement into a topic using a table stored connect string.
 # @since 2008-09-15
 # @author: Gavin M. Roy <gmr@myyearbook.com>
 
