@@ -24,7 +24,7 @@ def main():
 	dbGroup = OptionGroup(parser, 'PostgreSQL Connection options')
 	dbGroup.add_option('--host', '-h', default='localhost', help='database server host or socket directory (default: localhost)')
 	dbGroup.add_option('--port', '-p', type='int', default=5432, help='database server port (default: 5432)')
-	dbGroup.add_option('--user', '-u', default='postgres', help='database user name (default: postgres)')
+	dbGroup.add_option('--user', '-U', default='postgres', help='database user name (default: postgres)')
 	dbGroup.add_option('-W', action="store_true", default=False, help='force password prompt (should happen automatically)')
 	parser.add_option_group(dbGroup)
 	group = OptionGroup(parser, 'Golconde actions')
