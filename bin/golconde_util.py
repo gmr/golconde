@@ -21,22 +21,21 @@ def main():
 	parser.add_option('--dbname', '-d', help='specify database name to connect to')
 	parser.add_option('--schema', '-n', default='public', help='schema name to act upon (default: public)')
 	parser.add_option('--table', '-t', help='table name to act upon')
-	dbGroup = OptionGroup(parser, 'PostgreSQL Connection options')
-	dbGroup.add_option('--host', '-h', default='localhost', help='database server host or socket directory (default: localhost)')
-	dbGroup.add_option('--port', '-p', type='int', default=5432, help='database server port (default: 5432)')
-	dbGroup.add_option('--user', '-U', default='postgres', help='database user name (default: postgres)')
-	dbGroup.add_option('-W', action="store_true", default=False, help='force password prompt (should happen automatically)')
-	parser.add_option_group(dbGroup)
-	group = OptionGroup(parser, 'Golconde actions')
+	
+	group = OptionGroup(parser, 'PostgreSQL Connection options')
+	group.add_option('--host', '-h', default='localhost', help='database server host or socket directory (default: localhost)')
+	group.add_option('--port', '-p', type='int', default=5432, help='database server port (default: 5432)')
+	group.add_option('--user', '-U', default='postgres', help='database user name (default: postgres)')
+	group.add_option('-W', action="store_true", default=False, help='force password prompt (should happen automatically)')
+	parser.add_option_group(group)
+	
+	group = OptionGroup(parser, 'Golconde options')
 	group.add_option('--add', '-a', action="store_true", help='add the golconde trigger to a table for distribution')
 	group.add_option('--remove' , '-r', action="store_true", help='remove galconde trigger from table to stop distribution')
-
 	group.add_option('--queue', '-o', action="store_true", help='use an ActiveMQ Queue for a single consumer/client server')
 	group.add_option('--topic' , '-m', action="store_true", help='use an ActiveMQ Topic for multiple consumers/client servers')
-
 	group.add_option('--static', '-s', action="store_true", help='Use staticly compiled connection data for talking to ActiveMQ')
 	group.add_option('--dynamic' , '-y', action="store_true", help='Use the golconde.settings table to specify connection data')
-
 	parser.add_option_group(group)	
 	
 	# Parse the command line options
