@@ -238,7 +238,6 @@ def createTrigger(options, cursor):
 			triggerFunction.append("TD['old']['%s']" % row[1])
 			x += 1
 			if x < pkCount:
-				print "adding comma"
 				triggerFunction.append(',')
 
 	triggerFunction.append(')\n')
