@@ -204,6 +204,7 @@ def createTrigger(options, cursor):
 		triggerFunction.append("TD['new']['%s']," % row[1])
 
 	# Append the plpythonyu variables that will be replaced into our where clause
+	x = 0
 	for row in rows:
 		if row[5] == 't':
 			triggerFunction.append("TD['old']['%s']" % row[1])
@@ -231,18 +232,20 @@ def createTrigger(options, cursor):
 	triggerFunction.append('" % (')
 	
 	# Append the plpythonyu variables that will be replaced into our where clause
+	x = 0
 	for row in rows:
 		if row[5] == 't':
 			triggerFunction.append("TD['old']['%s']" % row[1])
 			x += 1
 			if x < pkCount:
+				print "adding comma"
 				triggerFunction.append(',')
 
 	triggerFunction.append(')\n')
 	# End Delete Logic
 
 	# End of Trigger Function	
-	triggerFunction.append('\n\nquery = "SELECT golconde.add_')
+	triggerFunction.append('\nquery = "SELECT golconde.add_')
 	
 	# Build the center parts of the function name to call based upon our options
 	if options.queue:
@@ -257,7 +260,7 @@ def createTrigger(options, cursor):
 	
 	# Add the rest of the trigger function
 	triggerFunction.append('statement(\'%s.%s\'::text,' % (options.schema, options.table))
-	triggerFunction.append('$$%s$$)" % sql\nplpy.execute(query)\n$BODY$\nLANGUAGE \'plpythonu\' VOLATILE\nCOST 100;')
+	triggerFunction.append('$$%s$$)" % sql\nplpy.execute(query)\n$BODY$\nLANGUAGE \'plpythonu\';')
 	
 	# Assemble the Trigger Function SQL
 	query = ''.join(triggerFunction)
