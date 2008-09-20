@@ -13,7 +13,7 @@ def main():
 
 	# Set our various display values for our Option Parser
 	usage = "usage: %prog [options]"
-	version = "%prog 0.1"
+	version = "%prog 0.2"
 	description = "Golconde command line utility to manage PostgreSQL origin server"
 
 	# Create our parser and setup our command line options

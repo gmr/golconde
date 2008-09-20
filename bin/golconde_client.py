@@ -35,7 +35,7 @@ def main():
 
 	# Set our various display values for our Option Parser
 	usage = "usage: %prog [options]"
-	version = "%prog 0.1"
+	version = "%prog 0.2"
 	description = "Golconde command line daemon to listen to a single topic or queue in ActiveMQ"
 
 	# Create our parser and setup our command line options
