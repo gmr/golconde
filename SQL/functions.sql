@@ -4,26 +4,25 @@ $$
 # @since 2008-09-15
 # @author: Gavin M. Roy <gmr@myyearbook.com>
 
-import pyactivemq
-from pyactivemq import ActiveMQConnectionFactory
+import stomp
 
 # Statically set MQ Server - Change if you want to use static connections
-server = 'tcp://localhost:61613?wireFormat=stomp'
+server = '127.0.0.1'
+port = 61613
 
-# Create our factory, connection, session, queue and producer
-factory = ActiveMQConnectionFactory(server)
-connection = factory.createConnection()
-session = connection.createSession()
-queue = session.createQueue('Golconde.%s' % tablename)
-producer = session.createProducer(queue)
+# Connect to the server
+connection = stomp.Connection([(server, port)])
+connection.start()
+connection.connect()
 
-# Create the message and send it
-message = session.createTextMessage()
-message.text = statement
-producer.send(message)
+# Define the queue 
+queue = '/queue/Golconde.%s' % tablename
+
+# Send the statement to the queue
+connection.send(destination=queue, message=statement)
 
 #Tidy up and return true
-connection.close()
+connection.disconnect()
 return 't';
 $$ LANGUAGE plpythonu;
 
@@ -32,27 +31,26 @@ $$
 # @summary Golconde Function to insert statement into a topic using a statically defined connect string.  Change it if you need it to connect somewhere else.
 # @since 2008-09-15
 # @author: Gavin M. Roy <gmr@myyearbook.com>
-
-import pyactivemq
-from pyactivemq import ActiveMQConnectionFactory
+import stomp
 
 # Statically set MQ Server - Change if you want to use static connections
-server = 'tcp://localhost:61613?wireFormat=stomp'
+server = '127.0.0.1'
+port = 61613
 
-# Create our factory, connection, session, queue and producer
-factory = ActiveMQConnectionFactory(server)
-connection = factory.createConnection()
-session = connection.createSession()
-topic = session.createTopic('Golconde.%s' % tablename)
-producer = session.createProducer(topic)
+# Connect to the server
+connection = stomp.Connection([(server, port)])
+connection.start()
+connection.connect()
 
-# Create the message and send it
-message = session.createTextMessage()
-message.text = statement
-producer.send(message)
+# Define the queue 
+topic = '/topic/Golconde.%s' % tablename
+
+# Send the statement to the queue
+connection.send(destination=topic, message=statement)
 
 #Tidy up and return true
-connection.close()
+connection.disconnect()
+
 return 't';
 $$ LANGUAGE plpythonu;
 

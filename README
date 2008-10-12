@@ -1,6 +1,6 @@
 Getting Started
 
- * Install all of the pre-requisites including ActiveMQ, ActiveMQ-CPP, pyactivemq, PostgreSQL and psycopg2.
+ * Install all of the pre-requisites including ActiveMQ, stomp.py, pyactivemq, PostgreSQL and psycopg2.
 
  * Load the Golconde SQL files including functions.sql as well as schema.sql if you would like dynamic configuration of the ActiveMQ server(s).
 

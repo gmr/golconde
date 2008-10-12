@@ -5,10 +5,8 @@
 # @since 2008-09-15
 # @author: Gavin M. Roy <gmr@myyearbook.com>
 
-import getpass, optparse, pyactivemq, psycopg2, os, sys, time
+import getpass, optparse, psycopg2, os, stomp, sys, time
 from optparse import OptionGroup
-from pyactivemq import ActiveMQConnectionFactory
-from pyactivemq import AcknowledgeMode
 
 # ActiveMQ Listener Class
 #

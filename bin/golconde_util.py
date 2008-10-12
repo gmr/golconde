@@ -48,6 +48,7 @@ def main():
 		
 	if not options.add and not options.remove:
 		print "Error: You must specify an action to perform"
+		parser.print_help()
 		sys.exit()
 
 	if options.add and not options.queue and not options.topic:
