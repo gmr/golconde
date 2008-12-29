@@ -29,11 +29,13 @@ port = 61613
 # Define the queue
 queue = '/queue/golconde.test'
 
-import random, stomp, sys, simplejson as json
+# Imports
+import random, simplejson as json, stomp
 
+# Main function for command line execution
 def main():
 
-  # Connect to our Stomp Connection
+  # Connect to our Stomp Connection (@todo move to Golconde Client)
   connection = stomp.Connection([(server, port)])
   connection.start()
   connection.connect()
@@ -61,10 +63,14 @@ def main():
         else:
           r.remove((valueB,valueA))
     else:
+      # We're doing an insert or upsert
       r.append((valueA,valueB))
       a = random.randint(0,1)
 
+    # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
     statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB}})
+    
+    # Send the statement via Stomp, we should replace this to make it internal to the Golconde client function
     connection.send(destination=queue, message=statement)
     
   print '%i distinct combinations inserted with %i actions' % ( len(r), limit)
