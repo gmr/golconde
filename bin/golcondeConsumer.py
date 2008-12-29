@@ -9,7 +9,22 @@ Listens to incoming commands, performing the appropriate queueing for subsequent
 @since 2008-12-14
 """
 
-import optparse, stomp, sys, time, yaml
+import optparse, stomp, sys, thread, time, yaml
+
+# Golconde Destination Queue Listener
+class GolcondeDestinationHandler(object):
+'''
+  The destination object should process inbound packets, going to the canonical source, validating success, then distributing to the target queues
+'''
+  def __init__(self,config):
+    print 'Initialized'
+
+  def on_error(self, headers, message):
+    print 'received an error %s' % message
+
+  def on_message(self, headers, message):
+    print 'received a message %s' % message
+
 
 def main():
   # Set our various display values for our Option Parser
@@ -37,12 +52,23 @@ def main():
     print "Invalid or missing configuration file: %s" % options.config
     sys.exit(1)
   
+  
+  # Empty destination connection list
+  destinationConnections = []
+  
+  # Loop through the destinationsy
   for (destination, targets) in config['Destinations'].items():
-    print 'Subscribing to Destination: %s' % destination
-    for (target, config) in targets.items():
-      print 'Connecting to Target: %s' % target
-      for (key,value) in config.items():
-        print 'Set %s to %s' % ( key, value)  
+    print 'Subscribing to Destination "%s" on queue: %s' % (destination, targets['queue'])
+    
+    # Connect to our stomplistener forthe Destination
+    stompConnection = stomp.Connection()
+    stompConnection.add_listener(GolcondeDestinationHandler(targets))
+    stompConnection.start()
+    stompConnection.connect()
+    stompConnection.subscribe(destination=targets['queue'],ack='auto')
+  
+  while (1):
+    time.sleep(2)
   
 if __name__ == "__main__":
 	main()

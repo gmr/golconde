@@ -2,6 +2,11 @@
 ---
 Destinations:
  Test:
+  stomp: localhost:61613
+  queue: /queue/golconde.test
+  pgsql: host=localhost user=gmr dbname=gmr
+  target: public.friendships
+  function: autoSQL
   target1:
    stomp: localhost:61613
    queue: /queue/golconde.destination1.test
