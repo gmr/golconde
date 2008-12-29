@@ -1,10 +1,11 @@
 %YAML 1.2
 ---
-Test:
-  Destinations:
-    destination1:
-      stomp: localhost:61613
-      queue: /queue/golconde.destination1.test
-      pgsql: host=localhost user=gmr dbname=destination
-      target: public.friendships
-      function: autoSQL
+Destinations:
+ Test:
+  target1:
+   stomp: localhost:61613
+   queue: /queue/golconde.destination1.test
+   pgsql: host=localhost user=gmr dbname=destination
+   target: public.friendships
+   function: autoSQL
+...

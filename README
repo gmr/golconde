@@ -1,19 +1,5 @@
 Getting Started
 
- * Install all of the pre-requisites including ActiveMQ, stomp.py, pyactivemq, PostgreSQL and psycopg2.
-
- * Load the Golconde SQL files including functions.sql as well as schema.sql if you would like dynamic configuration of the ActiveMQ server(s).
-
- * After installing the Golconde SQL to the database where you intend distribute data from, you will need to run the golconde_util.py script to install the required triggers in the origin server. If you are using the static triggers, make sure you've changed the connection strings in the trigger with the proper connection string for your ActiveMQ installation.
-
- * Create the schema for the tables you would like to distribute data to on your destination server(s)
-
- * Install the SQL functions in SQL/golconde.sql
-
- * Use the bin/golconde_util.py command line script to create the required trigger functions and trigger to send the data distribution queries into the ActiveMQ queue.
-
- * Execute and configure the golconde_client.py script on the destination server.
-
- * You should be distributing data through Golconde for your first table.
+ * @TODO Replace this with the new instructions
 
 For more information visit: http://code.google.com/p/golconde/
