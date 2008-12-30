@@ -11,7 +11,7 @@ Generate random Golconde Queue Messages for testing the various states and actio
 '''
 
 # Default Actions
-actions = ['add','upsert','update','delete']
+actions = ['add','set','update','delete']
 
 # Number of messages to limit to
 limit = 5000
@@ -63,7 +63,7 @@ def main():
         else:
           r.remove((valueB,valueA))
     else:
-      # We're doing an insert or upsert
+      # We're doing an insert or set
       r.append((valueA,valueB))
       a = random.randint(0,1)
 
