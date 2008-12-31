@@ -14,13 +14,13 @@ Generate random Golconde Queue Messages for testing the various states and actio
 actions = ['add','set','update','delete']
 
 # Number of messages to limit to
-limit = 1
+limit = 10000
 
 # Min User ID
 min = 0
 
 # Max User ID
-max = 100
+max = 1000
 
 # ActiveMQ Server & Port
 server = '127.0.0.1'
@@ -67,16 +67,14 @@ def main():
         statement = json.dumps({'action': actions[a], 'restriction': {'user_id': valueA, 'friend_id': valueB}})
 
       else:
-        # Update
-              
-        # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
+        # Update Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
         statement = json.dumps({'action': actions[a], 'data': {'timestamp': time.asctime(), 'status_id': random.randint(1,3)}, 
                                 'restriction': {'user_id': valueA, 'friend_id': valueB}})
 
     else:
       # We're doing an insert or set
       r.append((valueA,valueB))
-      a = random.randint(0,0)
+      a = random.randint(0,1)
 
       # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
       statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB, 'status_id': random.randint(0,3)}})

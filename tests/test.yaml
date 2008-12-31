@@ -15,7 +15,7 @@ Destinations:
   Targets:
    target1:
     stomp: localhost:61613
-    queue: /queue/golconde.test1.target2
+    queue: /queue/golconde.test1.target1
     pgsql: host=localhost user=gmr dbname=destination
     # Schema.Relation format
     target: public.friendships
