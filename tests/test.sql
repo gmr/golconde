@@ -18,3 +18,9 @@ INSERT INTO friendship_statuses VALUES ( 0, 'Unconfirmed' );
 INSERT INTO friendship_statuses VALUES ( 1, 'Confirmed' );
 INSERT INTO friendship_statuses VALUES ( 2, 'Blocked' );
 INSERT INTO friendship_statuses VALUES ( 3, 'Severed' );
+
+CREATE TABLE surrogate_test (
+  surrogate_id bigserial not null primary key,
+  added_at timestamp with time zone not null default now(),
+  description text not null
+);

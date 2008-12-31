@@ -56,7 +56,18 @@ def main():
     print 'Sending %s' % statement
     connection.send(destination=queue, message=statement)
     
-  print '%i distinct combinations inserted with %i actions' % ( len(r), limit)
+
+  # Loop through the number of operations to perform, specifically doing sets that should perform only updates
+  for i in range(0, limit):
+
+    # Randomize our seed
+    random.seed()
+    
+    # Send the statement via Stomp, we should replace this to make it internal to the Golconde client function
+    statement = json.dumps({'action': actions[random.randint(1,1)], 'data': {'surrogate_id': random.randint(1,limit), 'description': lorum[random.randint(0,4)], 'added_at': time.asctime()}})
+    print 'Sending %s' % statement
+    connection.send(destination=queue, message=statement)
+
 
 if __name__ == '__main__':
   main()

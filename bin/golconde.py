@@ -72,7 +72,7 @@ class AutoSQL(object):
         if message['data'].has_key(column_name):
           fields.append(column_name)
           fields.append(',')
-          if column_type in ['smallint','bigint','float']:
+          if column_type in ['smallint','bigint','float','int','numeric']:
             values.append('%s' % message['data'][column_name])
           else:
             values.append("'%s'" % message['data'][column_name])
@@ -143,7 +143,7 @@ class AutoSQL(object):
         
         # If our client passed in a value append our fields and values
         if message['restriction'].has_key(column_name):
-          if column_type in ['smallint','bigint','float','numeric']:
+          if column_type in ['smallint','bigint','float','int','numeric']:
             restriction.append("%s = %s" % ( column_name, message['restriction'][column_name]))
           else:
             restriction.append("%s = '%s'" % ( column_name,message['restriction'][column_name]))
@@ -165,7 +165,7 @@ class AutoSQL(object):
         logging.error('PostgreSQL Error: %s' % e[0])
         sys.exit(0)
       
-      except:
+      except Exception, e:
         # This is an error we don't know how to handle yet
         logging.error('PostgreSQL Error: %s' % e[0])
         sys.exit(1)
@@ -175,6 +175,11 @@ class AutoSQL(object):
       
     elif message['action'] == 'set':
     
+      """
+      Set works by doing an upsert: Perform an update and if it fails, do an insert.  It does not 
+      look for or respect restrictions, you would not use set to change primary key values
+      """
+    
       # Create our empty lists
       restriction = []
       values = []
@@ -183,49 +188,143 @@ class AutoSQL(object):
       for row in self.schema:
         column_name = row[1]
         column_type = row[3]
+        primary_key = row[4]
         
         # If our client passed in a restriction append our fields and values
-        if message['restriction'].has_key(column_name):
-          if column_type in ['smallint','bigint','float']:
-            restriction.append('%s = %s' % ( column_name, message['restriction'][column_name]))
+        if message['data'].has_key(column_name) and primary_key == 't':
+          if column_type in ['smallint','bigint','float','int','numeric']:
+            restriction.append('%s = %s' % ( column_name, message['data'][column_name]))
           else:
-            restriction.append("%s = '%s'" % ( column_name, message['restriction'][column_name]))
+            restriction.append("%s = '%s'" % ( column_name, message['data'][column_name]))
           restriction.append(' AND ')
 
         # If our client passed in a value append our fields and values
-        if message['data'].has_key(column_name):
-          if column_type in ['smallint','bigint','float']:
+        if message['data'].has_key(column_name) and primary_key != 't':
+          if column_type in ['smallint','bigint','float','int','numeric']:
             values.append('%s = %s' % (column_name, message['data'][column_name]))
           else:
             values.append("%s = '%s'" % (column_name, message['data'][column_name]))
           values.append(',')
 
-      # Remove the extra delimiters
-      restriction.pop()
-      values.pop()
-      
-      # Build our query string
-      restriction_string = ''.join(restriction)
-      value_string = ''.join(values)
-      query = 'UPDATE %s.%s SET %s WHERE %s;' % (self.schema_name, self.table_name, value_string, restriction_string)
-      
-      # Try and execute our query
-      try:
-        logging.debug('AutoSQL.process(update) running: %s' % query)
-        self.cursor.execute(query)
+      if len(restriction) == 0:
+        logging.debug('AutoSQL.process(set) Did not find a primary key, looking for a unique key')
         
-      except psycopg2.OperationalError, e:
-        logging.error('PostgreSQL Error: %s' % e[0])
-        sys.exit(0)
+        # Loop through our rows and see if have a unique key since we didn't pass a primary key 
+        for row in self.schema:
+          column_name = row[1]
+          column_type = row[3]
+          unique_key = row[5]
+          
+          # If our client passed in a restriction append our fields and values
+          if message['data'].has_key(column_name) and unique_key == 't':
+            if column_type in ['smallint','bigint','float','int','numeric']:
+              restriction.append('%s = %s' % ( column_name, message['data'][column_name]))
+            else:
+              restriction.append("%s = '%s'" % ( column_name, message['data'][column_name]))
+            restriction.append(' AND ')      
+
+      # If we found a primary key or unique queue, process the update, otherwise fall through to insert
+      if len(restriction) > 0:
       
-      except:
-        # This is an error we don't know how to handle yet
-        logging.error('PostgreSQL Error: %s' % e[0])
-        sys.exit(1)
+        # Remove the extra delimiters
+        restriction.pop()
+        values.pop()
+        
+        # Build our query string
+        restriction_string = ''.join(restriction)
+        value_string = ''.join(values)
+        query = 'UPDATE %s.%s SET %s WHERE %s;' % (self.schema_name, self.table_name, value_string, restriction_string)
+        
+        # Try and execute our query
+        try:
+          logging.debug('AutoSQL.process(set[update]) running: %s' % query)
+          self.cursor.execute(query)
+          
+        except psycopg2.OperationalError, e:
+          logging.error('PostgreSQL Error: %s' % e[0])
+          sys.exit(0)
+        
+        except Exception, e:
+          # This is an error we don't know how to handle yet
+          logging.error('PostgreSQL Error: %s' % e[0])
+          sys.exit(1)
+      
+      # Update failed, perform insert
+      if self.cursor.rowcount <= 0 or len(restriction) == 0:
+      
+        # Create our empty lists
+        fields = []
+        values = []
+        pk = []
+  
+        # Loop through our rows and see if we have values    
+        for row in self.schema:
+          column_name = row[1]
+          column_type = row[3]
+          primary_key = row[4]
+          
+          # If our client passed in a value append our fields and values
+          if message['data'].has_key(column_name):
+            fields.append(column_name)
+            fields.append(',')
+            if column_type in ['smallint','bigint','float','int','numeric']:
+              values.append('%s' % message['data'][column_name])
+            else:
+              values.append("'%s'" % message['data'][column_name])
+            values.append(',')
+            
+          # Build our primary key string for return criterea
+          if primary_key == 't':
+            pk.append(column_name)
+            pk.append(',')
+  
+        # Remove the extra comma delimiter
+        fields.pop()
+        values.pop()
+        pk.pop()
+        
+        # Build our query string
+        field_string = ''.join(fields)
+        value_string = ''.join(values)
+        primary_key = ''.join(pk)
+        query = 'INSERT INTO %s.%s (%s) VALUES (%s) RETURNING %s;' % (self.schema_name, 
+                self.table_name, field_string, value_string, primary_key)
+        # Run our query
+        try:
+          logging.debug('AutoSQL.process(set[add]) running: %s' % query)
+          self.cursor.execute(query)
+          
+        except psycopg2.OperationalError, e:
+          # This is a serious error and we should probably exit the application execution stack with an error
+          logging.error('PostgreSQL Error: %s' % e[0])
+          sys.exit(1)
+          
+        except psycopg2.IntegrityError, e:
+          # This is a PostgreSQL PK Constraint Error
+          logging.error('PostgreSQL Error: %s' % e[0])
+          return False
+        
+        except Exception, e:
+          # This is an error we don't know how to handle yet
+          logging.error('PostgreSQL Error: %s' % e[0])
+          sys.exit(1)
+        
+        # Grab our returned PK data if needed
+        pk_data = self.cursor.fetchone()
+        pk_offset = 0
+        
+        # Loop through the rows and see if we need to add pk values to the message
+        for row in self.schema:
+          column_name = row[1]
+          primary_key = row[4]
+          
+          # If our client passed in a value append our fields and values
+          if not message['data'].has_key(column_name) and primary_key == 't':
+            message['data'][column_name] = pk_data[pk_offset]
+            pk_offset += 1   
       
       # We successfully processed this message
       return json.dumps(message)
-
 
     elif message['action'] == 'update':
   
@@ -240,7 +339,7 @@ class AutoSQL(object):
         
         # If our client passed in a restriction append our fields and values
         if message['restriction'].has_key(column_name):
-          if column_type in ['smallint','bigint','float']:
+          if column_type in ['smallint','bigint','float','int','numeric']:
             restriction.append('%s = %s' % ( column_name, message['restriction'][column_name]))
           else:
             restriction.append("%s = '%s'" % ( column_name, message['restriction'][column_name]))
@@ -248,7 +347,7 @@ class AutoSQL(object):
 
         # If our client passed in a value append our fields and values
         if message['data'].has_key(column_name):
-          if column_type in ['smallint','bigint','float']:
+          if column_type in ['smallint','bigint','float','int','numeric']:
             values.append('%s = %s' % (column_name, message['data'][column_name]))
           else:
             values.append("%s = '%s'" % (column_name, message['data'][column_name]))
@@ -272,7 +371,7 @@ class AutoSQL(object):
         logging.error('PostgreSQL Error: %s' % e[0])
         sys.exit(0)
       
-      except:
+      except Exception, e:
         # This is an error we don't know how to handle yet
         logging.error('PostgreSQL Error: %s' % e[0])
         sys.exit(1)
