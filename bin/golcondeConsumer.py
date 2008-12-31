@@ -10,7 +10,7 @@ actions.
 @since 2008-12-14
 """
 
-import optparse, psycopg2, stomp, sys, thread, time, yaml
+import logging, optparse, psycopg2, simplejson as json, stomp, sys, thread, time, yaml
 
 class AutoSQL(object):
   """
@@ -28,58 +28,138 @@ class AutoSQL(object):
     
     # If the schema was not specified assume it's public
     if '.' not in target:
-      schema = 'public'
-      table = target
+      self.schema_name = 'public'
+      self.table_name = target
     else:
-      (schema, table) = target.split('.')
+      (self.schema_name, self.table_name) = target.split('.')
     
     # Get the Schema for our target
-    query = """SELECT f.attnum AS number, f.attname AS name, f.attnum,
+    query = """SELECT f.attnum AS number, f.attname AS name,
         f.attnotnull AS notnull, pg_catalog.format_type(f.atttypid,f.atttypmod) AS type,
         CASE WHEN p.contype = 'p' THEN 't' ELSE 'f' END AS primarykey,
-        CASE WHEN p.contype = 'u' THEN 't' ELSE 'f' END AS uniquekey,
-        CASE WHEN p.contype = 'f' THEN g.relname END AS foreignkey,
-        CASE WHEN p.contype = 'f' THEN p.confkey  END AS foreignkey_fieldnum, 
-        CASE WHEN p.contype = 'f' THEN g.relname END AS foreignkey, 
-        CASE WHEN p.contype = 'f' THEN p.conkey END AS foreignkey_connnum, 
-        CASE WHEN f.atthasdef = 't' THEN d.adsrc END AS default 
+        CASE WHEN p.contype = 'u' THEN 't' ELSE 'f' END AS uniquekey
        FROM pg_attribute f JOIN pg_class c ON c.oid = f.attrelid 
          JOIN pg_type t ON t.oid = f.atttypid 
          LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum 
          LEFT JOIN pg_namespace n ON n.oid = c.relnamespace 
          LEFT JOIN pg_constraint p ON p.conrelid = c.oid AND f.attnum = ANY ( p.conkey ) 
-         LEFT JOIN pg_class AS g ON p.confrelid = g.oid 
        WHERE c.relkind = 'r'::char AND n.nspname = '%s' AND c.relname = '%s' AND f.attnum > 0 
-       ORDER BY number;""" % (schema, table)
+       ORDER BY number;""" % (self.schema_name, self.table_name)
     
     # Execute the query
-    print 'Fetching schema data for %s.%s' % (schema,table)
+    logging.debug('Fetching schema data for %s.%s' % (self.schema_name,self.table_name))
     cursor.execute(query)
     rowCount = cursor.rowcount
-    rows = cursor.fetchall()
-  
-    # @todo Build the base queries for each of the action types  
-    print rows
+    self.schema = cursor.fetchall()
 
   # Process the message with our queries 
   def process(self, message):  
   
-    if message.action == 'add':
-      print 'autoSQL::add'
-    
-    elif message.action == 'delete':
-      print 'autoSQL::delete'
+    if message['action'] == 'add':
+
+      # Create our empty lists
+      fields = []
+      values = []
+
+      # Loop through our rows and see if we have values    
+      for row in self.schema:
+        column_name = row[1]
+        column_type = row[3]
+        
+        # If our client passed in a value append our fields and values
+        if message['data'].has_key(column_name):
+          fields.append(column_name)
+          fields.append(',')
+          if column_type in ['smallint','bigint','float']:
+            values.append('%s' % message['data'][column_name])
+          else:
+            values.append("'%s'" % message['data'][column_name])
+          values.append(',')
+
+      # Remove the extra comma delimiter
+      fields.pop()
+      values.pop()
       
-    elif message.action == 'set':
+      # Build our query string
+      field_string = ''.join(fields)
+      value_string = ''.join(values)
+      query = 'INSERT INTO %s.%s (%s) VALUES (%s);' % (self.schema_name, self.table_name, 
+                                                       field_string, value_string)
+      # Run our query
+      try:
+        logging.debug('AutoSQL.process(add) running: %s' % query)
+        self.cursor.execute(query)
+      
+      except psycopg2.OperationalError, e:
+        # This is a serious error and we should probably exit the application execution stack with an error
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(1)
+        
+      except psycopg2.IntegrityError, e:
+        # This is a PostgreSQL PK Constraint Error
+        logging.error('PostgreSQL Error: %s' % e[0])
+        return False
+      
+      except:
+        # This is an error we don't know how to handle yet
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(1)
+        
+      # We successfully processed this message
+      return True
+    
+    elif message['action'] == 'delete':
+  
+      # Create our empty lists
+      values = []
+
+      # Loop through our rows and see if we have values    
+      for row in self.schema:
+        column_name = row[1]
+        column_type = row[3]
+        
+        # If our client passed in a value append our fields and values
+        if message['data'].has_key(column_name):
+          if column_type in ['smallint','bigint','float']:
+            values.append('%s = %s' % ( column_name, message['data'][column_name]))
+          else:
+            values.append("%s = '%s'" % ( column_name, message['data'][column_name]))
+          values.append(' AND ')
+
+      # Remove the extra comma delimiter
+      values.pop()
+      
+      # Build our query string
+      value_string = ''.join(values)
+      query = 'DELETE FROM %s.%s WHERE %s;' % (self.schema_name, self.table_name, value_string)
+      
+      # Try and execute our query
+      try:
+        logging.debug('AutoSQL.process(delete) running: %s' % query)
+        self.cursor.execute(query)
+        
+      except psycopg2.OperationalError, e:
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(0)
+      
+      except:
+        # This is an error we don't know how to handle yet
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(1)
+      
+      # We successfully processed this message
+      return True
+      
+    elif message['action'] == 'set':
       print 'autoSQL::set'
 
-    elif message.action == 'update':
+    elif message['action'] == 'update':
       print 'autoSQL::update'
 
 
-class GolcondeDestinationHandler(object):
+class DestinationHandler(object):
   """
-  Golconde Destination Queue Listener
+  Destination Queue Listener
   
   The destination object should process inbound packets, going to the canonical
   source, validating success, then distributing to the target queues
@@ -91,7 +171,6 @@ class GolcondeDestinationHandler(object):
     self.function = config['function']
     self.target = config['target']
   
-    print config
     # Try to connect to our PostgreSQL DSN
     try:
       # Connect to the databases
@@ -122,18 +201,34 @@ class GolcondeDestinationHandler(object):
       print 'Undefined Destination Authorative Processing Function: %s' % self.function
       sys.exit(1)
     
-    print 'Destination Initialized'
+    # Variables to Connect to our Target stomp connections
+    self.connections = 0
+    self.destination_queue = []
+    self.destination_connections = []
+    
+    # Connect for sending messages
+    for (target_name, target_config) in config['Targets'].items():
+      self.destination_queue.append(target_config['queue'])
+      (host,port) = target_config['stomp'].split(':')
+      self.destination_connections.append(stomp.Connection([(host,int(port))]))
+      self.destination_connections[self.connections].start()
+      self.destination_connections[self.connections].connect()
+      self.connections += 1
+          
+    logging.info('Destination Initialized')
 
   def on_error(self, headers, message):
     print 'received an error %s' % message
 
-  def on_message(self, headers, message):
-    self.auto_sql.process(message)
+  def on_message(self, headers, message_in):
+    if self.auto_sql.process(json.loads(message_in)) == True:
+      for i in range(0, self.connections):
+        self.destination_connections[i].send(destination = self.destination_queue[i], message = message_in)
 
-class GolcondeTargetHandler(object):
+class TargetHandler(object):
   
   """
-  Golconde Target Queue Listener
+  Target Queue Listener
   
   The destination object should process inbound target packets, processing
   messages sent from the Destination Handler and putting them in their proper 
@@ -141,15 +236,69 @@ class GolcondeTargetHandler(object):
   """
   
   def __init__(self,config):
-    print 'Initialized'
+    # Set our values
+    self.function = config['function']
+    self.target = config['target']
+  
+    # Try to connect to our PostgreSQL DSN
+    try:
+      # Connect to the databases
+      self.pgsql = psycopg2.connect(config['pgsql'])
+      self.pgsql.set_isolation_level(0)
+      
+    # We encountered a problem
+    except psycopg2.OperationalError, e:
+
+      # Do string checks for various errors
+      if 'Connection refused' in e[0]:
+        print "Error: Connection refusted to PostgreSQL for %s" % config.pgsql
+        sys.exit(1)
+      
+      if 'authentication failed' in e[0] or 'no password supplied' in e[0]:
+        print "Error: authentication failed"
+        sys.exit(1)
+      
+      # Unhandled exception, let the user know and exit the program
+      raise
+      
+    # Build our cursor to work with
+    self.cursor = self.pgsql.cursor()
+    
+    if self.function == 'AutoSQL':
+      self.auto_sql = AutoSQL(self.cursor, self.target)
+    else:
+      print 'Undefined Destination Authorative Processing Function: %s' % self.function
+      sys.exit(1)
+        
+    logging.info('Target Initialized')
 
   def on_error(self, headers, message):
     print 'received an error %s' % message
 
-  def on_message(self, headers, message):
-    print 'received a message %s' % message
+  def on_message(self, headers, message_in):
+    self.auto_sql.process(json.loads(message_in))
 
+def startDestinationThread(destination_name, target):
+  # Connect to our stomp listener for the Destination
+  logging.info('Subscribing to Destination "%s" on queue: %s' % (destination_name, target['queue']))
+  (host,port) = target['stomp'].split(':')
+  destination_connection = stomp.Connection([(host,int(port))])
+  destination_connection.add_listener(DestinationHandler(target))
+  destination_connection.start()
+  destination_connection.connect()
+  destination_connection.subscribe(destination=target['queue'],ack='auto')
 
+def startTargetThread(target_name, target_config):
+  # Connect to our stomp listener for the Target
+  logging.info('Subscribing to Destination "%s" on queue: %s' % (target_name, target_config['queue']))
+  (host,port) = target_config['stomp'].split(':')
+  target_connection =  stomp.Connection([(host,int(port))])
+  target_connection.add_listener(TargetHandler(target_config))
+  target_connection.start()
+  target_connection.connect()
+  target_connection.subscribe(destination=target_config['queue'],ack='auto')
+
+    
 # Main Application Flow
 def main():
 
@@ -180,28 +329,23 @@ def main():
     print "Invalid or missing configuration file: %s" % options.config
     sys.exit(1)
     
-  # Empty destination connection list to maintain a stack of connections we're using
-  destination_connections = []
-  connections = 0
+  # Pass in our logging config    
+  logging.basicConfig(**config['Logging'])
   
-  # Loop through the destinationsy
+  # Loop through the destinations and kick off destination threads
   for (destination, targets) in config['Destinations'].items():
-    print 'Subscribing to Destination "%s" on queue: %s' % (destination, targets['queue'])
+    thread.start_new_thread(startDestinationThread,(destination, targets))
     
-    # Connect to our stomplistener forthe Destination
-    destination_connections.append(stomp.Connection())
-    destination_connections[connections].add_listener(GolcondeDestinationHandler(targets))
-    destination_connections[connections].start()
-    destination_connections[connections].connect()
-    destination_connections[connections].subscribe(destination=targets['queue'],ack='auto')
-    connections += 1
+    # Loop through the targets and kick off their threads
+    for ( target_name, target_config ) in targets['Targets'].items():
+      thread.start_new_thread(startTargetThread,(target_name, target_config))
   
   """
   Just have the main loop run in a low CPU utilization mode, but keep us running while
   we receive messages from our Stomp server
   """
-  while (1):
-    time.sleep(2)
+  while 1:
+    pass
   
 if __name__ == "__main__":
 	main()

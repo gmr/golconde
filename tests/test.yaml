@@ -1,5 +1,10 @@
 %YAML 1.2
 ---
+Logging:
+# filename: log.txt
+# stream: sys.stderr
+ format: "%(levelname) -10s %(asctime)s %(message)s"
+ level: 10
 Destinations:
  Test:
   stomp: localhost:61613
@@ -7,10 +12,17 @@ Destinations:
   pgsql: host=localhost user=gmr dbname=gmr
   target: friendships
   function: AutoSQL
-  target1:
-   stomp: localhost:61613
-   queue: /queue/golconde.destination1.test
-   pgsql: host=localhost user=gmr dbname=destination
-   target: public.friendships
-   function: AutoSQL
+  Targets:
+   target1:
+    stomp: localhost:61613
+    queue: /queue/golconde.destination1.test
+    pgsql: host=localhost user=gmr dbname=destination
+    target: public.friendships
+    function: AutoSQL
+   target2:
+    stomp: localhost:61613
+    queue: /queue/golconde.destination2.test
+    pgsql: host=localhost user=gmr dbname=destination_two
+    target: public.friendships
+    function: AutoSQL    
 ...
