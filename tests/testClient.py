@@ -14,13 +14,13 @@ Generate random Golconde Queue Messages for testing the various states and actio
 actions = ['add','set','update','delete']
 
 # Number of messages to limit to
-limit = 10000
+limit = 1000000
 
 # Min User ID
 min = 0
 
 # Max User ID
-max = 500
+max = 10000
 
 # ActiveMQ Server & Port
 server = '127.0.0.1'
@@ -30,7 +30,7 @@ port = 61613
 queue = '/queue/golconde.test'
 
 # Imports
-import random, simplejson as json, stomp
+import random, simplejson as json, stomp, time
 
 # Main function for command line execution
 def main():
@@ -62,15 +62,27 @@ def main():
           r.remove((valueA,valueB))
         else:
           r.remove((valueB,valueA))
+
+        # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
+        statement = json.dumps({'action': actions[a], 'restriction': {'user_id': valueA, 'friend_id': valueB}})
+
+      else:
+        # Update
+              
+        # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
+        statement = json.dumps({'action': actions[a], 'data': {'timestamp': time.asctime(), 'status_id': random.randint(1,3)}, 
+                                'restriction': {'user_id': valueA, 'friend_id': valueB}})
+
     else:
       # We're doing an insert or set
       r.append((valueA,valueB))
       a = random.randint(0,0)
 
-    # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
-    statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB}})
+      # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
+      statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB, 'status_id': random.randint(0,3)}})
     
     # Send the statement via Stomp, we should replace this to make it internal to the Golconde client function
+    print 'Sending %s' % statement
     connection.send(destination=queue, message=statement)
     
   print '%i distinct combinations inserted with %i actions' % ( len(r), limit)
