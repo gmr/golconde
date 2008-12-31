@@ -14,20 +14,20 @@ Generate random Golconde Queue Messages for testing the various states and actio
 actions = ['add','set','update','delete']
 
 # Number of messages to limit to
-limit = 1000000
+limit = 1
 
 # Min User ID
 min = 0
 
 # Max User ID
-max = 10000
+max = 100
 
 # ActiveMQ Server & Port
 server = '127.0.0.1'
 port = 61613
 
 # Define the queue
-queue = '/queue/golconde.test'
+queue = '/queue/golconde.test1'
 
 # Imports
 import random, simplejson as json, stomp, time

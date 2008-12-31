@@ -1,13 +1,13 @@
 %YAML 1.2
 ---
 Logging:
- filename: log.txt
+ #filename: log.txt
  format: "%(levelname) -10s %(asctime)s %(message)s"
- level: 20
+ level: 10
 Destinations:
- Test:
+ Test1:
   stomp: localhost:61613
-  queue: /queue/golconde.test
+  queue: /queue/golconde.test1
   pgsql: host=localhost user=gmr dbname=gmr
   # If you exclude the schema, it will default to public
   target: friendships
@@ -15,15 +15,36 @@ Destinations:
   Targets:
    target1:
     stomp: localhost:61613
-    queue: /queue/golconde.destination1.test
+    queue: /queue/golconde.test1.target2
     pgsql: host=localhost user=gmr dbname=destination
     # Schema.Relation format
     target: public.friendships
     function: AutoSQL
    target2:
     stomp: localhost:61613
-    queue: /queue/golconde.destination2.test
+    queue: /queue/golconde.test1.target2
     pgsql: host=localhost user=gmr dbname=destination_two
     target: public.friendships
+    function: AutoSQL    
+ Test2:
+  stomp: localhost:61613
+  queue: /queue/golconde.test2
+  pgsql: host=localhost user=gmr dbname=gmr
+  # If you exclude the schema, it will default to public
+  target: surrogate_test
+  function: AutoSQL
+  Targets:
+   target1:
+    stomp: localhost:61613
+    queue: /queue/golconde.test2.target1
+    pgsql: host=localhost user=gmr dbname=destination
+    # Schema.Relation format
+    target: public.surrogate_test
+    function: AutoSQL
+   target2:
+    stomp: localhost:61613
+    queue: /queue/golconde.test2.target2
+    pgsql: host=localhost user=gmr dbname=destination_two
+    target: public.surrogate_test
     function: AutoSQL    
 ...

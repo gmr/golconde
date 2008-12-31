@@ -60,11 +60,13 @@ class AutoSQL(object):
       # Create our empty lists
       fields = []
       values = []
+      pk = []
 
       # Loop through our rows and see if we have values    
       for row in self.schema:
         column_name = row[1]
         column_type = row[3]
+        primary_key = row[4]
         
         # If our client passed in a value append our fields and values
         if message['data'].has_key(column_name):
@@ -75,21 +77,28 @@ class AutoSQL(object):
           else:
             values.append("'%s'" % message['data'][column_name])
           values.append(',')
+          
+        # Build our primary key string for return criterea
+        if primary_key == 't':
+          pk.append(column_name)
+          pk.append(',')
 
       # Remove the extra comma delimiter
       fields.pop()
       values.pop()
+      pk.pop()
       
       # Build our query string
       field_string = ''.join(fields)
       value_string = ''.join(values)
-      query = 'INSERT INTO %s.%s (%s) VALUES (%s);' % (self.schema_name, self.table_name, 
-                                                       field_string, value_string)
+      primary_key = ''.join(pk)
+      query = 'INSERT INTO %s.%s (%s) VALUES (%s) RETURNING %s;' % (self.schema_name, 
+              self.table_name, field_string, value_string, primary_key)
       # Run our query
       try:
         logging.debug('AutoSQL.process(add) running: %s' % query)
         self.cursor.execute(query)
-      
+        
       except psycopg2.OperationalError, e:
         # This is a serious error and we should probably exit the application execution stack with an error
         logging.error('PostgreSQL Error: %s' % e[0])
@@ -100,18 +109,32 @@ class AutoSQL(object):
         logging.error('PostgreSQL Error: %s' % e[0])
         return False
       
-      except:
+      except Exception, e:
         # This is an error we don't know how to handle yet
         logging.error('PostgreSQL Error: %s' % e[0])
         sys.exit(1)
+      
+      # Grab our returned PK data if needed
+      pk_data = self.cursor.fetchone()
+      pk_offset = 0
+      
+      # Loop through the rows and see if we need to add pk values to the message
+      for row in self.schema:
+        column_name = row[1]
+        primary_key = row[4]
         
+        # If our client passed in a value append our fields and values
+        if not message['data'].has_key(column_name) and primary_key == 't':
+          message['data'][column_name] = pk_data[pk_offset]
+          pk_offset += 1   
+      
       # We successfully processed this message
-      return True
+      return json.dumps(message)
     
     elif message['action'] == 'delete':
-  
+      
       # Create our empty lists
-      values = []
+      restriction = []
 
       # Loop through our rows and see if we have values    
       for row in self.schema:
@@ -119,19 +142,19 @@ class AutoSQL(object):
         column_type = row[3]
         
         # If our client passed in a value append our fields and values
-        if message['data'].has_key(column_name):
-          if column_type in ['smallint','bigint','float']:
-            values.append('%s = %s' % ( column_name, message['data'][column_name]))
+        if message['restriction'].has_key(column_name):
+          if column_type in ['smallint','bigint','float','numeric']:
+            restriction.append("%s = %s" % ( column_name, message['restriction'][column_name]))
           else:
-            values.append("%s = '%s'" % ( column_name, message['data'][column_name]))
-          values.append(' AND ')
+            restriction.append("%s = '%s'" % ( column_name,message['restriction'][column_name]))
+          restriction.append(' AND ')
 
       # Remove the extra comma delimiter
-      values.pop()
+      restriction.pop()
       
       # Build our query string
-      value_string = ''.join(values)
-      query = 'DELETE FROM %s.%s WHERE %s;' % (self.schema_name, self.table_name, value_string)
+      restriction_string = ''.join(restriction)
+      query = 'DELETE FROM %s.%s WHERE %s;' % (self.schema_name, self.table_name, restriction_string)
       
       # Try and execute our query
       try:
@@ -148,14 +171,114 @@ class AutoSQL(object):
         sys.exit(1)
       
       # We successfully processed this message
-      return True
+      return json.dumps(message)
       
     elif message['action'] == 'set':
-      print 'autoSQL::set'
+    
+      # Create our empty lists
+      restriction = []
+      values = []
+
+      # Loop through our rows and see if we have values    
+      for row in self.schema:
+        column_name = row[1]
+        column_type = row[3]
+        
+        # If our client passed in a restriction append our fields and values
+        if message['restriction'].has_key(column_name):
+          if column_type in ['smallint','bigint','float']:
+            restriction.append('%s = %s' % ( column_name, message['restriction'][column_name]))
+          else:
+            restriction.append("%s = '%s'" % ( column_name, message['restriction'][column_name]))
+          restriction.append(' AND ')
+
+        # If our client passed in a value append our fields and values
+        if message['data'].has_key(column_name):
+          if column_type in ['smallint','bigint','float']:
+            values.append('%s = %s' % (column_name, message['data'][column_name]))
+          else:
+            values.append("%s = '%s'" % (column_name, message['data'][column_name]))
+          values.append(',')
+
+      # Remove the extra delimiters
+      restriction.pop()
+      values.pop()
+      
+      # Build our query string
+      restriction_string = ''.join(restriction)
+      value_string = ''.join(values)
+      query = 'UPDATE %s.%s SET %s WHERE %s;' % (self.schema_name, self.table_name, value_string, restriction_string)
+      
+      # Try and execute our query
+      try:
+        logging.debug('AutoSQL.process(update) running: %s' % query)
+        self.cursor.execute(query)
+        
+      except psycopg2.OperationalError, e:
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(0)
+      
+      except:
+        # This is an error we don't know how to handle yet
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(1)
+      
+      # We successfully processed this message
+      return json.dumps(message)
+
 
     elif message['action'] == 'update':
-      print 'autoSQL::update'
+  
+      # Create our empty lists
+      restriction = []
+      values = []
 
+      # Loop through our rows and see if we have values    
+      for row in self.schema:
+        column_name = row[1]
+        column_type = row[3]
+        
+        # If our client passed in a restriction append our fields and values
+        if message['restriction'].has_key(column_name):
+          if column_type in ['smallint','bigint','float']:
+            restriction.append('%s = %s' % ( column_name, message['restriction'][column_name]))
+          else:
+            restriction.append("%s = '%s'" % ( column_name, message['restriction'][column_name]))
+          restriction.append(' AND ')
+
+        # If our client passed in a value append our fields and values
+        if message['data'].has_key(column_name):
+          if column_type in ['smallint','bigint','float']:
+            values.append('%s = %s' % (column_name, message['data'][column_name]))
+          else:
+            values.append("%s = '%s'" % (column_name, message['data'][column_name]))
+          values.append(',')
+
+      # Remove the extra delimiters
+      restriction.pop()
+      values.pop()
+      
+      # Build our query string
+      restriction_string = ''.join(restriction)
+      value_string = ''.join(values)
+      query = 'UPDATE %s.%s SET %s WHERE %s;' % (self.schema_name, self.table_name, value_string, restriction_string)
+      
+      # Try and execute our query
+      try:
+        logging.debug('AutoSQL.process(update) running: %s' % query)
+        self.cursor.execute(query)
+        
+      except psycopg2.OperationalError, e:
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(0)
+      
+      except:
+        # This is an error we don't know how to handle yet
+        logging.error('PostgreSQL Error: %s' % e[0])
+        sys.exit(1)
+      
+      # We successfully processed this message
+      return json.dumps(message)
 
 class DestinationHandler(object):
   """
@@ -221,9 +344,10 @@ class DestinationHandler(object):
     log.error('Destination received an error from AMQ: %s' % message)
 
   def on_message(self, headers, message_in):
-    if self.auto_sql.process(json.loads(message_in)) == True:
+    message_out = self.auto_sql.process(json.loads(message_in))
+    if message_out != False:
       for i in range(0, self.connections):
-        self.destination_connections[i].send(destination = self.destination_queue[i], message = message_in)
+        self.destination_connections[i].send(destination = self.destination_queue[i], message = message_out)
 
 class TargetHandler(object):
   
@@ -290,7 +414,7 @@ def startDestinationThread(destination_name, target):
 
 def startTargetThread(target_name, target_config):
   # Connect to our stomp listener for the Target
-  logging.info('Subscribing to Destination "%s" on queue: %s' % (target_name, target_config['queue']))
+  logging.info('Subscribing to Target "%s" on queue: %s' % (target_name, target_config['queue']))
   (host,port) = target_config['stomp'].split(':')
   target_connection =  stomp.Connection([(host,int(port))])
   target_connection.add_listener(TargetHandler(target_config))
