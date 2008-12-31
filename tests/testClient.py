@@ -14,7 +14,7 @@ Generate random Golconde Queue Messages for testing the various states and actio
 actions = ['add','set','update','delete']
 
 # Number of messages to limit to
-limit = 5000
+limit = 10000
 
 # Min User ID
 min = 0
@@ -65,7 +65,7 @@ def main():
     else:
       # We're doing an insert or set
       r.append((valueA,valueB))
-      a = random.randint(0,1)
+      a = random.randint(0,0)
 
     # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
     statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB}})

@@ -218,7 +218,7 @@ class DestinationHandler(object):
     logging.info('Destination Initialized')
 
   def on_error(self, headers, message):
-    print 'received an error %s' % message
+    log.error('Destination received an error from AMQ: %s' % message)
 
   def on_message(self, headers, message_in):
     if self.auto_sql.process(json.loads(message_in)) == True:
@@ -267,13 +267,13 @@ class TargetHandler(object):
     if self.function == 'AutoSQL':
       self.auto_sql = AutoSQL(self.cursor, self.target)
     else:
-      print 'Undefined Destination Authorative Processing Function: %s' % self.function
+      print 'Undefined Destination Target Processing Function: %s' % self.function
       sys.exit(1)
         
     logging.info('Target Initialized')
 
   def on_error(self, headers, message):
-    print 'received an error %s' % message
+    log.error('Target received an error from AMQ: %s' % message)
 
   def on_message(self, headers, message_in):
     self.auto_sql.process(json.loads(message_in))
@@ -297,8 +297,7 @@ def startTargetThread(target_name, target_config):
   target_connection.start()
   target_connection.connect()
   target_connection.subscribe(destination=target_config['queue'],ack='auto')
-
-    
+   
 # Main Application Flow
 def main():
 

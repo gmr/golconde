@@ -1,15 +1,15 @@
 %YAML 1.2
 ---
 Logging:
-# filename: log.txt
-# stream: sys.stderr
+ filename: log.txt
  format: "%(levelname) -10s %(asctime)s %(message)s"
- level: 10
+ level: 20
 Destinations:
  Test:
   stomp: localhost:61613
   queue: /queue/golconde.test
   pgsql: host=localhost user=gmr dbname=gmr
+  # If you exclude the schema, it will default to public
   target: friendships
   function: AutoSQL
   Targets:
@@ -17,6 +17,7 @@ Destinations:
     stomp: localhost:61613
     queue: /queue/golconde.destination1.test
     pgsql: host=localhost user=gmr dbname=destination
+    # Schema.Relation format
     target: public.friendships
     function: AutoSQL
    target2:
