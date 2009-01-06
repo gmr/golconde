@@ -418,10 +418,14 @@ class DestinationHandler(object):
     self.cursor = self.pgsql.cursor()
     
     if self.function == 'AutoSQL':
-      self.auto_sql = AutoSQL(self.cursor, self.target)
+      self.message_processor = AutoSQL(self.cursor, self.target)
     else:
-      print 'Undefined Destination Authorative Processing Function: %s' % self.function
-      sys.exit(1)
+      try:
+        module = __import__(self.function)
+        self.message_processor = getattr(module, 'process')
+      except:
+        print 'Undefined Destination Authorative Processing Function: %s' % self.function
+        sys.exit(1)
     
     # Variables to Connect to our Target stomp connections
     self.connections = 0
@@ -443,7 +447,7 @@ class DestinationHandler(object):
     log.error('Destination received an error from AMQ: %s' % message)
 
   def on_message(self, headers, message_in):
-    message_out = self.auto_sql.process(json.loads(message_in))
+    message_out = self.message_processor.process(json.loads(message_in))
     if message_out != False:
       for i in range(0, self.connections):
         self.destination_connections[i].send(destination = self.destination_queue[i], message = message_out)
@@ -490,8 +494,12 @@ class TargetHandler(object):
     if self.function == 'AutoSQL':
       self.auto_sql = AutoSQL(self.cursor, self.target)
     else:
-      print 'Undefined Destination Target Processing Function: %s' % self.function
-      sys.exit(1)
+      try:
+        module = __import__(self.function)
+        self.message_processor = getattr(module, 'process')
+      except:
+        print 'Undefined Destination Target Processing Function: %s' % self.function
+        sys.exit(1)
         
     logging.info('Target Initialized')
 
