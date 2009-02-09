@@ -5,7 +5,7 @@
 # @since 2008-09-13
 # @author: Gavin M. Roy <gmr@myyearbook.com>
 
-import optparse, psycopg2, sys, getpass
+import optparse, psycopg2, simplejson as json, sys, getpass
 from optparse import OptionGroup
 
 def main():
@@ -28,9 +28,16 @@ def main():
   group.add_option('-W', action="store_true", default=False, help='force password prompt (should happen automatically)')
   parser.add_option_group(group)
   
+  group = OptionGroup(parser, 'Message Queue Broker options')
+  group.add_option('--broker_type', '-T', default='stomp', help='Broker type, currently only stomp is supported (default: stomp)')
+  group.add_option('--broker_host', '-H', default='127.0.0.1', help='Broker ip address (default: 127.0.0.1)')
+  group.add_option('--broker_port', '-P', type='int', default=61613, help='database server port (default: 61613)')
+  parser.add_option_group(group)  
+  
   group = OptionGroup(parser, 'Golconde options')
   group.add_option('--add', '-a', action="store_true", help='add the golconde trigger to a table for distribution')
   group.add_option('--remove' , '-r', action="store_true", help='remove galconde trigger from table to stop distribution')
+  group.add_option('--queue' , '-q', default='auto', help='queue name to use.  If set to auto, will be schema_name.table_name')
   parser.add_option_group(group)	
   
   # Parse the command line options
@@ -56,6 +63,19 @@ def main():
     print "Error: you must specify a database name to connect to"
     parser.print_help()
     sys.exit()
+
+  if not options.broker_host or not options.broker_port:
+    print "Error: you must specify a broker host and port connect to"
+    parser.print_help()
+    sys.exit()
+
+  if options.broker_type not in ['stomp']:
+    print "Error: you must pick a valid broker type"
+    parser.print_help()
+    sys.exit()
+
+  if options.queue == 'auto':
+    options.queue = '%s.%s' % ( options.schema, options.table )
 
   # Build the base DSN	
   dsn = "host='%s' port='%i' user='%s' dbname='%s'" % (options.host, options.port, options.user, options.dbname)
@@ -119,156 +139,42 @@ def createTrigger(options, cursor):
   cursor.execute(query)
   rowCount = cursor.rowcount
   rows = cursor.fetchall()
-  
-  # Create the function	
-  triggerFunction = ['CREATE OR REPLACE FUNCTION %s.%s_trigger_function() RETURNS trigger AS\n$BODY$\n' % (options.schema, options.table)]
-  triggerFunction.append("if TD['event'] == 'INSERT':\n")
-  
-  # Insert logic
-  triggerFunction.append("  sql = \"INSERT INTO %s.%s (" % (options.schema, options.table))
-  
-  # Append the column names to insert into
-  x = 0
-  for row in rows:
-    triggerFunction.append(row[1])	
-    x += 1
-    if x < rowCount:
-      triggerFunction.append(',')
-  
-  triggerFunction.append(') VALUES (')
 
-  # Append the placeholders to replace content into
-  x = 0
+  # Buidl the primary key list
+  primary_key = []
   for row in rows:
-    triggerFunction.append("'%s'")
-    x += 1
-    if x < rowCount:
-      triggerFunction.append(',')
-  
-  triggerFunction.append(");\" % (")
+    if row[5] == 't':
+      primary_key.append(row[1])
 
-  # Append the plpythonu variables that will be replaced in our previously constructed string
-  x = 0
-  for row in rows:
-    triggerFunction.append("TD['new']['%s']" % row[1])
-    x += 1
-    if x < rowCount:
-      triggerFunction.append(',')
-  triggerFunction.append(')\n')
-  # End Insert Logic
-  
-  # Count the primary keys
-  pkCount = 0
-  for row in rows:
-    if row[5] == 't':
-      pkCount += 1
+  # Add the entry to golconde.trigger_connections
+  print 'Adding golconde.trigger_connections entry:'
+  sql = "INSERT INTO golconde.trigger_connections VALUES ( '%s','%s','%s','%s',%i,'%s','%s' )" % \
+    ( options.schema, options.table, options.broker_type, options.broker_host, options.broker_port, options.queue, json.dumps(primary_key) )
+  print ' > %s' % sql
+  cursor.execute(sql)
 
-  # Update logic
-  triggerFunction.append("\nif TD['event'] == 'UPDATE':\n")
-  triggerFunction.append("  sql = \"UPDATE %s.%s SET " % (options.schema, options.table))
-  
-  # Create the columns to update and the placeholders for the values
-  x = 0
-  for row in rows:
-    triggerFunction.append("%s = '" % row[1])
-    triggerFunction.append("%s'")	
-    x += 1
-    if x < rowCount:
-      triggerFunction.append(',')
-  
-  triggerFunction.append(' WHERE ')
-  
-  # Create the variable spots for primary key columns for the where clause
-  x = 0
-  for row in rows:
-    if row[5] == 't':
-      triggerFunction.append("%s = '" % row[1])
-      triggerFunction.append("%s'")
-      x += 1
-      if x < pkCount:
-        triggerFunction.append(' AND ')		
-  
-  triggerFunction.append('" % (')
-  
-  # Append the plpythonu variables that will be replaced in our column update areas
-  for row in rows:
-    triggerFunction.append("TD['new']['%s']," % row[1])
-  
-  # Append the plpythonyu variables that will be replaced into our where clause
-  x = 0
-  for row in rows:
-    if row[5] == 't':
-      triggerFunction.append("TD['old']['%s']" % row[1])
-      x += 1
-      if x < pkCount:
-        triggerFunction.append(',')
-  
-  triggerFunction.append(')\n')
-  # End Update Logic
-  
-  # Delete Logic
-  triggerFunction.append("\nif TD['event'] == 'DELETE':\n")
-  triggerFunction.append("  sql = \"DELETE FROM %s.%s WHERE " % (options.schema, options.table))
-  
-  # Create the variable spots for primary key columns for the where clause
-  x = 0
-  for row in rows:
-    if row[5] == 't':
-      triggerFunction.append("%s = '" % row[1])
-      triggerFunction.append("%s'")
-      x += 1
-      if x < pkCount:
-        triggerFunction.append(' AND ')		
-  
-  triggerFunction.append('" % (')
-  
-  # Append the plpythonyu variables that will be replaced into our where clause
-  x = 0
-  for row in rows:
-    if row[5] == 't':
-      triggerFunction.append("TD['old']['%s']" % row[1])
-      x += 1
-      if x < pkCount:
-        triggerFunction.append(',')
-  
-  triggerFunction.append(')\n')
-  # End Delete Logic
-  
-  # End of Trigger Function	
-  triggerFunction.append('\nquery = "SELECT golconde.add_')
-  
-  # Build the center parts of the function name to call based upon our options
-  triggerFunction.append('queue_')
-  
-  # Add the rest of the trigger function
-  triggerFunction.append('statement(\'%s.%s\'::text,' % (options.schema, options.table))
-  triggerFunction.append('$$%s$$)" % sql\nplpy.execute(query)\n$BODY$\nLANGUAGE \'plpythonu\';')
-  
-  # Assemble the Trigger Function SQL
-  query = ''.join(triggerFunction)
-  
-  # Create the Trigger Function
-  print "Creating trigger function: %s.%s_trigger_function()" % ( options.schema, options.table )
-  print query
-  #cursor.execute(query)
-  
   # Create the Trigger
-  print "Creating trigger: %s.%s_trigger" % ( options.schema, options.table )
-  trigger = "CREATE TRIGGER %s_trigger AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH ROW EXECUTE PROCEDURE %s.%s_trigger_function();" % ( options.table, options.schema, options.table, options.schema, options.table)
-  #cursor.execute(trigger)
+  print "Creating trigger: golconde.after_trigger_on_%s_%s" % ( options.schema, options.table ) 
+  sql = 'CREATE TRIGGER golconde_after_trigger_on_%s_%s AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH ROW EXECUTE PROCEDURE golconde.trigger_function()' % \
+    ( options.schema, options.table, options.schema, options.table )
+  print ' > %s' % sql  
+  cursor.execute(sql)
+  
 
 # Build and apply the trigger to call the function in the database 
 def dropTrigger(options, cursor):	
 
-  # Dropping the Trigger
-  print "Dropping trigger: %s.%s_trigger" % ( options.schema, options.table )
-  trigger = "DROP TRIGGER %s_trigger ON %s.%s;" % ( options.table, options.schema, options.table )
-  cursor.execute(trigger)	
-  
-  # Dropping the Trigger Function
-  print "Dropping trigger function: %s.%s_trigger_function()" % ( options.schema, options.table )
-  trigger = "DROP FUNCTION %s.%s_trigger_function();" % ( options.schema, options.table )
-  cursor.execute(trigger)	
+  # Add the entry to golconde.trigger_connections
+  print 'Removing golconde.trigger_connections entry:'
+  sql = "DELETE FROM golconde.trigger_connections WHERE schema_name = '%s' AND table_name = '%s'" % ( options.schema, options.table )
+  print ' > %s' % sql
+  cursor.execute(sql)
 
+  # Create the Trigger
+  print "Dropping trigger: golconde.after_trigger_on_%s_%s" % ( options.schema, options.table ) 
+  sql = 'DROP TRIGGER golconde_after_trigger_on_%s_%s ON %s.%s' % ( options.schema, options.table, options.schema, options.table )
+  print ' > %s' % sql  
+  cursor.execute(sql)
+  
 if __name__ == "__main__":
   main()		

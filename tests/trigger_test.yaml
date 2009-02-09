@@ -7,7 +7,7 @@ Logging:
 Destinations:
  Transactions:
   stomp: localhost:61613
-  queue: /queue/golconde.transactions
+  queue: /queue/public.transactions
   pgsql: host=localhost user=gmr dbname=destination
   # If you exclude the schema, it will default to public
   target: transactions

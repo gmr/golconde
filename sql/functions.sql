@@ -58,6 +58,8 @@ elif TD['event'] == 'UPDATE':
    restriction[key] = TD['old'][key]
   packet = {'action': 'update', 'restriction': restriction, 'data': TD['new']}
 
+payload = json.dumps(packet)
+
 # Enqueue it
 if result[0]['connection_type'] == 'stomp':
   import stomp
@@ -65,7 +67,7 @@ if result[0]['connection_type'] == 'stomp':
   connection = stomp.Connection([(result[0]['server_address'], result[0]['server_port'])])
   connection.start()
   connection.connect()
-  connection.send(destination=queue_name, message=json.dumps(packet))
+  connection.send(destination=queue_name, message=payload)
 else:
   plpy.error('golconde.trigger_function error: Invalid connection type specified "%s"' % result[0]['connection_type']) 
 
