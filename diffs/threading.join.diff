@@ -1,0 +1,51 @@
+Index: golconde.py
+===================================================================
+--- golconde.py	(revision 82)
++++ golconde.py	(working copy)
+@@ -10,7 +10,8 @@
+ @since 2008-12-14
+ """
+ 
+-import logging, optparse, psycopg2, simplejson as json, stomp, sys, thread, time, yaml
++import logging, optparse, psycopg2, simplejson as json, stomp, sys, time, yaml
++from threading import Thread
+ 
+ class AutoSQL(object):
+   """
+@@ -563,21 +564,25 @@
+   # Pass in our logging config    
+   logging.basicConfig(**config['Logging'])
+   
++  # List for our threads
++  threads = []
++  
+   # Loop through the destinations and kick off destination threads
+   for (destination, destination_config) in config['Destinations'].items():
+-    thread.start_new_thread(startDestinationThread,(destination, destination_config))
+-    
++    t = Thread(None, startDestinationThread, None, (destination, destination_config) )
++    t.start()
++    threads.append(t)
++
+     # Loop through the targets and kick off their threads
+     if destination_config.has_key('Targets'):
+       for ( target_name, target_config ) in destination_config['Targets'].items():
+-        thread.start_new_thread(startTargetThread,(target_name, target_config))
++        t = Thread(None, startTargetThread, None, (target_name, target_config))
++        t.start()
++        threads.append(t)
++        
++  for thread in threads:
++    print 'Joining thread %s' % thread.getName()
++    thread.join()
+   
+-  """
+-  Just have the main loop run in a low CPU utilization mode, but keep us running while
+-  we receive messages from our Stomp server
+-  """
+-  while 1:
+-    time.sleep(1)
+-  
+ if __name__ == "__main__":
+ 	main()
+\ No newline at end of file
