@@ -1,0 +1,15 @@
+%YAML 1.2
+---
+Logging:
+ #filename: log.txt
+ format: "%(levelname) -10s %(asctime)s %(message)s"
+ level: 10
+Destinations:
+ Transactions:
+  stomp: localhost:61613
+  queue: /queue/golconde.transactions
+  pgsql: host=localhost user=gmr dbname=destination
+  # If you exclude the schema, it will default to public
+  target: transactions
+  function: AutoSQL
+...

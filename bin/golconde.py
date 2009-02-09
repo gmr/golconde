@@ -433,13 +433,14 @@ class DestinationHandler(object):
     self.destination_connections = []
     
     # Connect for sending messages
-    for (target_name, target_config) in config['Targets'].items():
-      self.destination_queue.append(target_config['queue'])
-      (host,port) = target_config['stomp'].split(':')
-      self.destination_connections.append(stomp.Connection([(host,int(port))]))
-      self.destination_connections[self.connections].start()
-      self.destination_connections[self.connections].connect()
-      self.connections += 1
+    if config.has_key('Targets'):
+      for (target_name, target_config) in config['Targets'].items():
+        self.destination_queue.append(target_config['queue'])
+        (host,port) = target_config['stomp'].split(':')
+        self.destination_connections.append(stomp.Connection([(host,int(port))]))
+        self.destination_connections[self.connections].start()
+        self.destination_connections[self.connections].connect()
+        self.connections += 1
           
     logging.info('Destination Initialized')
 
@@ -563,12 +564,13 @@ def main():
   logging.basicConfig(**config['Logging'])
   
   # Loop through the destinations and kick off destination threads
-  for (destination, targets) in config['Destinations'].items():
-    thread.start_new_thread(startDestinationThread,(destination, targets))
+  for (destination, destination_config) in config['Destinations'].items():
+    thread.start_new_thread(startDestinationThread,(destination, destination_config))
     
     # Loop through the targets and kick off their threads
-    for ( target_name, target_config ) in targets['Targets'].items():
-      thread.start_new_thread(startTargetThread,(target_name, target_config))
+    if destination_config.has_key('Targets'):
+      for ( target_name, target_config ) in destination_config['Targets'].items():
+        thread.start_new_thread(startTargetThread,(target_name, target_config))
   
   """
   Just have the main loop run in a low CPU utilization mode, but keep us running while
