@@ -575,7 +575,7 @@ def main():
   we receive messages from our Stomp server
   """
   while 1:
-    pass
+    time.sleep(1)
   
 if __name__ == "__main__":
 	main()
