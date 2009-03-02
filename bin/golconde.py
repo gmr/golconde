@@ -443,8 +443,6 @@ class DestinationHandler(object):
       try:
         module = __import__(self.function)
         self.message_processor = getattr(module, 'process')
-        print 'Processed a message'
-        sys.exit(0)
       except:
         print 'Undefined Destination Authorative Processing Function: %s' % self.function
         sys.exit(1)
