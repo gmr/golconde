@@ -8,9 +8,10 @@ actions.
 
 @author Gavin M. Roy <gmr@myyearbook.com>
 @since 2008-12-14
+@requires Python 2.6
 """
 
-import logging, optparse, psycopg2, json, stomp, sys, thread, time, yaml
+import logging, optparse, psycopg2, json, os, stomp, sys, thread, time, yaml
 
 class AutoSQL(object):
   """
@@ -34,17 +35,30 @@ class AutoSQL(object):
       (self.schema_name, self.table_name) = target.split('.')
     
     # Get the Schema for our target
-    query = """SELECT f.attnum AS number, f.attname AS name,
-        f.attnotnull AS notnull, pg_catalog.format_type(f.atttypid,f.atttypmod) AS type,
-        CASE WHEN p.contype = 'p' THEN 't' ELSE 'f' END AS primarykey,
-        CASE WHEN p.contype = 'u' THEN 't' ELSE 'f' END AS uniquekey
-       FROM pg_attribute f JOIN pg_class c ON c.oid = f.attrelid 
-         JOIN pg_type t ON t.oid = f.atttypid 
-         LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum 
-         LEFT JOIN pg_namespace n ON n.oid = c.relnamespace 
-         LEFT JOIN pg_constraint p ON p.conrelid = c.oid AND f.attnum = ANY ( p.conkey ) 
-       WHERE c.relkind = 'r'::char AND n.nspname = '%s' AND c.relname = '%s' AND f.attnum > 0 
-       ORDER BY number;""" % (self.schema_name, self.table_name)
+    query = """SELECT att.attnum AS "number", att.attname AS "name",
+            att.attnotnull AS not_null,
+            pg_catalog.format_type(att.atttypid, att.atttypmod) AS "type",
+            bool_or((con.contype = 'p') IS TRUE) AS primary_key,
+            bool_or((con.contype = 'u') IS TRUE) AS unique_constraint,
+            bool_or(ind.indisunique IS TRUE) AS unique_index
+       FROM pg_catalog.pg_attribute att
+       JOIN pg_catalog.pg_class rel ON rel.oid = att.attrelid
+       JOIN pg_catalog.pg_namespace nsp ON nsp.oid = rel.relnamespace
+       LEFT JOIN pg_catalog.pg_constraint con
+                 ON con.conrelid = rel.oid
+                    AND att.attnum = ANY(con.conkey)
+                    AND con.contype IN ('p', 'u')
+       LEFT JOIN pg_catalog.pg_index ind
+                 ON ind.indrelid = rel.oid
+                    AND att.attnum = ANY(ind.indkey)
+                    AND ind.indisunique
+                    AND ind.indisvalid
+       WHERE rel.relkind = 'r'
+             AND att.attnum > 0
+             AND (nsp.nspname, rel.relname) = ('%s', '%s')
+       GROUP BY att.attnum, att.attname, att.attnotnull,
+                att.atttypid, att.atttypmod
+       ORDER BY att.attnum;""" % (self.schema_name, self.table_name)
     
     # Execute the query
     logging.debug('Fetching schema data for %s.%s' % (self.schema_name,self.table_name))
@@ -67,19 +81,21 @@ class AutoSQL(object):
         column_name = row[1]
         column_type = row[3]
         primary_key = row[4]
+        unique_constraint = row[5]
+        unique_index = row[6]        
         
         # If our client passed in a value append our fields and values
         if message['data'].has_key(column_name):
           fields.append(column_name)
           fields.append(',')
           if column_type in ['smallint','bigint','float','int','numeric']:
-            values.append('%s' % message['data'][column_name])
+            values.append("%s" % message['data'][column_name])
           else:
-            values.append("'%s'" % message['data'][column_name])
+            values.append("$GOLCONDE$%s$GOLCONDE$" % message['data'][column_name])
           values.append(',')
           
-        # Build our primary key string for return criterea
-        if primary_key == 't':
+        # Build our primary key / unique constraint / unique index string for return criterea
+        if primary_key is True or unique_constraint is True or unique_index is True:
           pk.append(column_name)
           pk.append(',')
 
@@ -146,7 +162,7 @@ class AutoSQL(object):
           if column_type in ['smallint','bigint','float','int','numeric']:
             restriction.append("%s = %s" % ( column_name, message['restriction'][column_name]))
           else:
-            restriction.append("%s = '%s'" % ( column_name,message['restriction'][column_name]))
+            restriction.append("%s = $GOLCONDE$%s$GOLCONDE$" % ( column_name,message['restriction'][column_name]))
           restriction.append(' AND ')
 
       # Remove the extra comma delimiter
@@ -189,21 +205,21 @@ class AutoSQL(object):
         column_name = row[1]
         column_type = row[3]
         primary_key = row[4]
-        
+
         # If our client passed in a restriction append our fields and values
-        if message['data'].has_key(column_name) and primary_key == 't':
+        if message['data'].has_key(column_name) and primary_key is True:
           if column_type in ['smallint','bigint','float','int','numeric']:
-            restriction.append('%s = %s' % ( column_name, message['data'][column_name]))
+            restriction.append("%s = %s" % ( column_name, message['data'][column_name]))
           else:
-            restriction.append("%s = '%s'" % ( column_name, message['data'][column_name]))
+            restriction.append("%s = $GOLCONDE$%s$GOLCONDE$" % ( column_name, message['data'][column_name]))
           restriction.append(' AND ')
 
         # If our client passed in a value append our fields and values
-        if message['data'].has_key(column_name) and primary_key != 't':
+        elif message['data'].has_key(column_name) and primary_key is not True:
           if column_type in ['smallint','bigint','float','int','numeric']:
-            values.append('%s = %s' % (column_name, message['data'][column_name]))
+            values.append("%s = %s" % (column_name, message['data'][column_name]))
           else:
-            values.append("%s = '%s'" % (column_name, message['data'][column_name]))
+            values.append("%s = $GOLCONDE$%s$GOLCONDE$" % (column_name, message['data'][column_name]))
           values.append(',')
 
       if len(restriction) == 0:
@@ -213,14 +229,15 @@ class AutoSQL(object):
         for row in self.schema:
           column_name = row[1]
           column_type = row[3]
-          unique_key = row[5]
-          
+          unique_constraint = row[5]
+          unique_index = row[6]
+
           # If our client passed in a restriction append our fields and values
-          if message['data'].has_key(column_name) and unique_key == 't':
+          if message['data'].has_key(column_name) and ( unique_constraint is True or unique_index is True ):
             if column_type in ['smallint','bigint','float','int','numeric']:
-              restriction.append('%s = %s' % ( column_name, message['data'][column_name]))
+              restriction.append("%s = %s" % ( column_name, message['data'][column_name]))
             else:
-              restriction.append("%s = '%s'" % ( column_name, message['data'][column_name]))
+              restriction.append("%s = $GOLCONDE$%s$GOLCONDE$" % ( column_name, message['data'][column_name]))
             restriction.append(' AND ')      
 
       # If we found a primary key or unique queue, process the update, otherwise fall through to insert
@@ -262,6 +279,9 @@ class AutoSQL(object):
           column_name = row[1]
           column_type = row[3]
           primary_key = row[4]
+          unique_constraint = row[5]
+          unique_index = row[6]        
+                  
           
           # If our client passed in a value append our fields and values
           if message['data'].has_key(column_name):
@@ -270,11 +290,11 @@ class AutoSQL(object):
             if column_type in ['smallint','bigint','float','int','numeric']:
               values.append('%s' % message['data'][column_name])
             else:
-              values.append("'%s'" % message['data'][column_name])
+              values.append("$GOLCONDE$%s$GOLCONDE$" % message['data'][column_name])
             values.append(',')
             
           # Build our primary key string for return criterea
-          if primary_key == 't':
+          if primary_key is True or unique_constraint is True or unique_index is True:
             pk.append(column_name)
             pk.append(',')
   
@@ -340,17 +360,17 @@ class AutoSQL(object):
         # If our client passed in a restriction append our fields and values
         if message['restriction'].has_key(column_name):
           if column_type in ['smallint','bigint','float','int','numeric']:
-            restriction.append('%s = %s' % ( column_name, message['restriction'][column_name]))
+            restriction.append("%s = %s" % ( column_name, message['restriction'][column_name]))
           else:
-            restriction.append("%s = '%s'" % ( column_name, message['restriction'][column_name]))
+            restriction.append("%s = $GOLCONDE$%s$GOLCONDE$" % ( column_name, message['restriction'][column_name]))
           restriction.append(' AND ')
 
         # If our client passed in a value append our fields and values
         if message['data'].has_key(column_name):
           if column_type in ['smallint','bigint','float','int','numeric']:
-            values.append('%s = %s' % (column_name, message['data'][column_name]))
+            values.append("%s = %s" % (column_name, message['data'][column_name]))
           else:
-            values.append("%s = '%s'" % (column_name, message['data'][column_name]))
+            values.append("%s = $GOLCONDE$%s$GOLCONDE$" % (column_name, message['data'][column_name]))
           values.append(',')
 
       # Remove the extra delimiters
@@ -423,6 +443,8 @@ class DestinationHandler(object):
       try:
         module = __import__(self.function)
         self.message_processor = getattr(module, 'process')
+        print 'Processed a message'
+        sys.exit(0)
       except:
         print 'Undefined Destination Authorative Processing Function: %s' % self.function
         sys.exit(1)
@@ -542,9 +564,12 @@ def main():
   parser = optparse.OptionParser(usage=usage,
                                  version=version,
                                  description=description)
+  parser.add_option("-f", "--foreground",
+                  action="store_true", dest="foreground", default=False,
+                  help="Do not fork and stay in foreground")                                 
   parser.add_option("-v", "--verbose",
-                  action="store_true", dest="verbose", default=True,
-                  help="make lots of noise [default]")
+                  action="store_true", dest="verbose", default=False,
+                  help="make lots of noise")
   parser.add_option("-c", "--config", 
                   action="store", type="string", default="golconde.yaml", 
                   help="Specify the configuration file to load.")
@@ -559,17 +584,47 @@ def main():
   except:
     print "Invalid or missing configuration file: %s" % options.config
     sys.exit(1)
-    
+
+  # Set logging levels dictionary
+  logging_levels = {'debug': logging.DEBUG,
+                    'info': logging.INFO,
+                    'warning': logging.WARNING,
+                    'error': logging.ERROR,
+                    'critical': logging.CRITICAL}
+
+  # Get the logging value from the dictionary
+  logging_level = config['Logging']['level']
+  config['Logging']['level'] = logging_levels.get(config['Logging']['level'], logging.NOTSET)
+
   # Pass in our logging config    
   logging.basicConfig(**config['Logging'])
+  logging.info('Log level set to %s' % logging_level)
+
+  # Fork our process to detach if not told to stay in foreground
+  if options.foreground is False:
+    print 'Golconde has started.'
+    try:
+      pid = os.fork()
+    except OSError, e:
+      raise Exception, "%s [%d]" % (e.strerror, e.errno)
+
+    if pid == 0: 
+      logging.info('Child forked and running.')
+      os.setsid()
+    else:
+      logging.info('Parent process ending.')
+      sys.exit(0)
+
   
   # Loop through the destinations and kick off destination threads
   for (destination, destination_config) in config['Destinations'].items():
+    logging.info('Starting new destination thread: %s' % destination)
     thread.start_new_thread(startDestinationThread,(destination, destination_config))
     
     # Loop through the targets and kick off their threads
     if destination_config.has_key('Targets'):
       for ( target_name, target_config ) in destination_config['Targets'].items():
+        logging.info('Starting new target thread: %s' % target_name)
         thread.start_new_thread(startTargetThread,(target_name, target_config))
   
   """
