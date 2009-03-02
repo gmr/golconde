@@ -282,7 +282,6 @@ class AutoSQL(object):
           unique_constraint = row[5]
           unique_index = row[6]        
                   
-          
           # If our client passed in a value append our fields and values
           if message['data'].has_key(column_name):
             fields.append(column_name)
@@ -612,7 +611,6 @@ def main():
     else:
       logging.info('Parent process ending.')
       sys.exit(0)
-
   
   # Loop through the destinations and kick off destination threads
   for (destination, destination_config) in config['Destinations'].items():
