@@ -1,5 +1,9 @@
 Getting Started
 
  * @TODO Replace this with the new instructions
+ 
+Note about stomp.py:
+
+The version of stomp.py on Jason Briggs' site is for Python 2.5 and previous.  I have patched it and the version in lib uses hashlib instead of the deprecated md5 import.
 
 For more information visit: http://code.google.com/p/golconde/
