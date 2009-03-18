@@ -1,9 +1,13 @@
-Getting Started
+Golconde - a Loosely Coupled Data Distribution System for PostgreSQL
 
- * @TODO Replace this with the new instructions
+Requirements
+
+ * PostgreSQL (Only tested with 8.3)
+ * ActiveMQ (Only tested with 5.1) - http://activemq.apache.org/
+ * Stomp.py - Note lib/stomp.py in Golconde trunk for warning free python 2.6 utilization
+ * psycopg2 - http://initd.org/pub/software/psycopg/
+ * PyYAML - http://pyyaml.org/wiki/PyYAML
+ * Python 2.6
  
-Note about stomp.py:
-
-The version of stomp.py on Jason Briggs' site is for Python 2.5 and previous.  I have patched it and the version in lib uses hashlib instead of the deprecated md5 import.
 
 For more information visit: http://code.google.com/p/golconde/
