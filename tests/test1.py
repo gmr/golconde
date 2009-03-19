@@ -30,7 +30,7 @@ port = 61613
 queue = '/queue/golconde.test1'
 
 # Imports
-import random, simplejson as json, stomp, time
+import random, json, stomp, time
 
 # Main function for command line execution
 def main():
@@ -55,7 +55,7 @@ def main():
 
     # Randomly pick an action based upon if we've seen this item or not
     if (valueA,valueB) in r or (valueB,valueA) in r:
-      a = random.randint(2,3)
+      a = random.randint(1,3)
       # If it's a delete, remove it from the stack so we can act on it again
       if actions[a] == 'delete':
         if (valueA,valueB) in r:
@@ -72,9 +72,9 @@ def main():
                                 'restriction': {'user_id': valueA, 'friend_id': valueB}})
 
     else:
-      # We're doing an insert or set
+      # We're doing an insert
       r.append((valueA,valueB))
-      a = random.randint(0,1)
+      a = 0
 
       # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
       statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB, 'status_id': random.randint(0,3)}})

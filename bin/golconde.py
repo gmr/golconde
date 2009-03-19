@@ -11,7 +11,10 @@ actions.
 @requires Python 2.6
 """
 
-import logging, optparse, psycopg2, json, os, stomp, sys, thread, time, yaml
+import logging, optparse, psycopg2, json, os, stomp, sys, thread, threading, time, yaml
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+
+version = '0.6'
 
 class AutoSQL(object):
     """
@@ -26,6 +29,8 @@ class AutoSQL(object):
     
         # We expect a connected functional cursor
         self.cursor = cursor
+        
+        self.stats = {'add':0,'delete':0,'set':0,'update':0,'command_duration':0, 'errors':0}
         
         # If the schema was not specified assume it's public
         if '.' not in target:
@@ -70,7 +75,9 @@ class AutoSQL(object):
     def process(self, message):    
     
         if message['action'] == 'add':
-
+    
+            self.stats['add'] += 1
+            
             # Create our empty lists
             fields = []
             values = []
@@ -99,10 +106,15 @@ class AutoSQL(object):
                     pk.append(column_name)
                     pk.append(',')
 
-            # Remove the extra comma delimiter
-            fields.pop()
-            values.pop()
-            pk.pop()
+            # Remove the extra delimiters
+            try:
+                fields.pop()
+                values.pop()
+                pk.pop()
+            except:
+                logging.error('AutoSQL data packet decoding failed.  Message columns did not match schema.')
+                sys.exit(1)
+                
             
             # Build our query string
             field_string = ''.join(fields)
@@ -113,8 +125,10 @@ class AutoSQL(object):
             # Run our query
             try:
                 logging.debug('AutoSQL.process(add) running: %s' % query)
+                t = time.time()
                 self.cursor.execute(query)
-                
+                self.stats['command_duration'] += time.time() - t
+                     
             except psycopg2.OperationalError, e:
                 # This is a serious error and we should probably exit the application execution stack with an error
                 logging.error('PostgreSQL Error: %s' % e[0])
@@ -122,6 +136,7 @@ class AutoSQL(object):
                 
             except psycopg2.IntegrityError, e:
                 # This is a PostgreSQL PK Constraint Error
+                self.stats['errors'] += 1
                 logging.error('PostgreSQL Error: %s' % e[0])
                 return False
             
@@ -148,7 +163,9 @@ class AutoSQL(object):
             return json.dumps(message)
         
         elif message['action'] == 'delete':
-            
+
+            self.stats['delete'] += 1            
+
             # Create our empty lists
             restriction = []
 
@@ -175,7 +192,9 @@ class AutoSQL(object):
             # Try and execute our query
             try:
                 logging.debug('AutoSQL.process(delete) running: %s' % query)
+                t = time.time()
                 self.cursor.execute(query)
+                self.stats['command_duration'] += time.time() - t
                 
             except psycopg2.OperationalError, e:
                 logging.error('PostgreSQL Error: %s' % e[0])
@@ -195,7 +214,9 @@ class AutoSQL(object):
             Set works by doing an upsert: Perform an update and if it fails, do an insert.    It does not 
             look for or respect restrictions, you would not use set to change primary key values
             """
-        
+
+            self.stats['set'] += 1
+                    
             # Create our empty lists
             restriction = []
             values = []
@@ -244,9 +265,13 @@ class AutoSQL(object):
             if len(restriction) > 0:
             
                 # Remove the extra delimiters
-                restriction.pop()
-                values.pop()
-                
+                try:
+                    restriction.pop()
+                    values.pop()
+                except:
+                    logging.error('AutoSQL data packet decoding failed.  Message columns did not match schema.')
+                    sys.exit(1)
+                                
                 # Build our query string
                 restriction_string = ''.join(restriction)
                 value_string = ''.join(values)
@@ -255,8 +280,10 @@ class AutoSQL(object):
                 # Try and execute our query
                 try:
                     logging.debug('AutoSQL.process(set[update]) running: %s' % query)
+                    t = time.time()
                     self.cursor.execute(query)
-                    
+                    self.stats['command_duration'] += time.time() - t
+                                        
                 except psycopg2.OperationalError, e:
                     logging.error('PostgreSQL Error: %s' % e[0])
                     sys.exit(0)
@@ -297,11 +324,15 @@ class AutoSQL(object):
                         pk.append(column_name)
                         pk.append(',')
     
-                # Remove the extra comma delimiter
-                fields.pop()
-                values.pop()
-                pk.pop()
-                
+                # Remove the extra delimiters
+                try:
+                    fields.pop()
+                    values.pop()
+                    pk.pop()
+                except:
+                    logging.error('AutoSQL data packet decoding failed.  Message columns did not match schema.')
+                    sys.exit(1)
+                                
                 # Build our query string
                 field_string = ''.join(fields)
                 value_string = ''.join(values)
@@ -346,7 +377,9 @@ class AutoSQL(object):
             return json.dumps(message)
 
         elif message['action'] == 'update':
-    
+            
+            self.stats['delete'] += 1
+                
             # Create our empty lists
             restriction = []
             values = []
@@ -373,9 +406,13 @@ class AutoSQL(object):
                     values.append(',')
 
             # Remove the extra delimiters
-            restriction.pop()
-            values.pop()
-            
+            try:
+                restriction.pop()
+                values.pop()
+            except:
+                logging.error('AutoSQL data packet decoding failed.  Message columns did not match schema.')
+                sys.exit(1)
+                
             # Build our query string
             restriction_string = ''.join(restriction)
             value_string = ''.join(values)
@@ -384,7 +421,9 @@ class AutoSQL(object):
             # Try and execute our query
             try:
                 logging.debug('AutoSQL.process(update) running: %s' % query)
+                t = time.time()
                 self.cursor.execute(query)
+                self.stats['command_duration'] += time.time() - t
                 
             except psycopg2.OperationalError, e:
                 logging.error('PostgreSQL Error: %s' % e[0])
@@ -397,6 +436,10 @@ class AutoSQL(object):
             
             # We successfully processed this message
             return json.dumps(message)
+    
+    # Return our stats dictionary
+    def get_stats(self):
+        return self.stats
 
 class DestinationHandler(object):
     """
@@ -406,11 +449,12 @@ class DestinationHandler(object):
     source, validating success, then distributing to the target queues
     """
 
-    def __init__(self,config):
+    def __init__(self,name, config):
 
         # Set our values
         self.function = config['function']
         self.target = config['target']
+        self.name = name
     
         # Try to connect to our PostgreSQL DSN
         try:
@@ -471,6 +515,9 @@ class DestinationHandler(object):
         if message_out != False:
             for i in range(0, self.connections):
                 self.destination_connections[i].send(destination = self.destination_queue[i], message = message_out)
+                
+    def get_stats(self):
+        return self.message_processor.get_stats()
 
 class TargetHandler(object):
     
@@ -482,10 +529,11 @@ class TargetHandler(object):
     location
     """
     
-    def __init__(self,config):
+    def __init__(self,name, config):
         # Set our values
         self.function = config['function']
         self.target = config['target']
+        self.name = name
     
         # Try to connect to our PostgreSQL DSN
         try:
@@ -512,7 +560,7 @@ class TargetHandler(object):
         self.cursor = self.pgsql.cursor()
         
         if self.function == 'AutoSQL':
-            self.auto_sql = AutoSQL(self.cursor, self.target)
+            self.message_processor = AutoSQL(self.cursor, self.target)
         else:
             try:
                 module = __import__(self.function)
@@ -527,131 +575,203 @@ class TargetHandler(object):
         log.error('Target received an error from AMQ: %s' % message)
 
     def on_message(self, headers, message_in):
-        self.auto_sql.process(json.loads(message_in))
+        self.message_processor.process(json.loads(message_in))
+        
+    def get_stats(self):
+        return self.message_processor.get_stats()        
 
-def startDestinationThread(destination_name, target):
-    # Connect to our stomp listener for the Destination
-    logging.info('Subscribing to Destination "%s" on queue: %s' % (destination_name, target['queue']))
-    (host,port) = target['stomp'].split(':')
-    destination_connection = stomp.Connection([(host,int(port))])
-    destination_connection.add_listener(DestinationHandler(target))
-    destination_connection.start()
-    destination_connection.connect()
-    destination_connection.subscribe(destination=target['queue'],ack='auto')
+class HTTPHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/stats':
+            global threads
+            
+            # Build a list of thread stats returns
+            thread_stats = []
+            for thread in threads:
+                thread_stats.append(thread.get_stats())
+            
+            stats = { 'worker_threads': len(threads), 'threads': thread_stats }           
+            response = json.dumps(stats) + "\n"
+            self.send_response(200)
+            self.send_header('Content-type','application/json')
+            self.send_header('Content-length', len(response))
+            self.send_header('X-Server', 'Golconde/%s' % version)
+            self.end_headers()
+            self.wfile.write(response)
+        else:
+            self.send_error(404, 'File not found: %s' % self.path)            
+        return
 
-def startTargetThread(target_name, target_config):
-    # Connect to our stomp listener for the Target
-    logging.info('Subscribing to Target "%s" on queue: %s' % (target_name, target_config['queue']))
-    (host,port) = target_config['stomp'].split(':')
-    target_connection =    stomp.Connection([(host,int(port))])
-    target_connection.add_listener(TargetHandler(target_config))
-    target_connection.start()
-    target_connection.connect()
-    target_connection.subscribe(destination=target_config['queue'],ack='auto')
-     
-# Main Application Flow
-def main():
+class DestinationThread(threading.Thread):
 
-    # Set our various display values for our Option Parser
-    usage = "usage: %prog [options]"
-    version = "%prog 0.3"
-    description = "Golconde command line daemon to listen to top level Golconde destination queues"
+    def __init__(self, name, config):
+        threading.Thread.__init__(self)
+        
+        # Set internal variables
+        self.name = name
+        self.config = config
 
-    # Create our parser and setup our command line options
-    parser = optparse.OptionParser(usage=usage,
-                                                                 version=version,
-                                                                 description=description)
-    parser.add_option("-f", "--foreground",
-                                    action="store_true", dest="foreground", default=False,
-                                    help="Do not fork and stay in foreground")                                                                 
-    parser.add_option("-v", "--verbose",
-                                    action="store_true", dest="verbose", default=False,
-                                    help="make lots of noise")
-    parser.add_option("-c", "--config", 
-                                    action="store", type="string", default="golconde.yaml", 
-                                    help="Specify the configuration file to load.")
+    def run(self):
+        
+        logging.info('Subscribing to Destination "%s" on queue: %s' % (self.name, self.config['queue']))
 
-    # Parse our options and arguments                                    
-    options, args = parser.parse_args()
+        # Create our Destination Handler Object    
+        self.handler = DestinationHandler(self.name, self.config)
+        
+        # Get our host and port to listen on        
+        (host,port) = self.config['stomp'].split(':')
+        
+        # Connect to our stomp listener for the Destination
+        destination_connection = stomp.Connection([(host,int(port))])
+        destination_connection.add_listener(self.handler)
+        destination_connection.start()
+        destination_connection.connect()
+        destination_connection.subscribe(destination=self.config['queue'],ack='auto')
 
-    # Load the Configuration file
+    def get_stats(self):
+        return { self.name: self.handler.get_stats() }
+        
+class TargetThread(threading.Thread):
+
+    def __init__(self, name, config):
+        threading.Thread.__init__(self)
+            
+        # Set internal variables
+        self.config = config    
+        self.name = target_name
+
+    def run(self):
+    
+        logging.info('Subscribing to Target "%s" on queue: %s' % (target_name, target_config['queue']))
+
+        # Create our Target Handler Object
+        self.handler = TargetHandler(self.name, self.config)
+
+        # Get the host and port to listen on
+        (host,port) = self.config['stomp'].split(':')
+
+        # Connect to our stomp listener for the Target
+        target_connection = stomp.Connection([(host,int(port))])
+        target_connection.add_listener(self.handler)
+        target_connection.start()
+        target_connection.connect()
+        target_connection.subscribe(destination=self.config['queue'],ack='auto')
+
+    def get_stats(self):
+        return { self.name: self.handler.get_stats() }
+
+# Set our various display values for our Option Parser
+usage = "usage: %prog [options]"
+version_string = "%%prog %s" % version
+description = "Golconde command line daemon to listen to top level Golconde destination queues"
+
+# Create our parser and setup our command line options
+parser = optparse.OptionParser(usage=usage,
+                                                             version=version_string,
+                                                             description=description)
+parser.add_option("-f", "--foreground",
+                                action="store_true", dest="foreground", default=False,
+                                help="Do not fork and stay in foreground")                                                                 
+parser.add_option("-v", "--verbose",
+                                action="store_true", dest="verbose", default=False,
+                                help="make lots of noise")
+parser.add_option("-c", "--config", 
+                                action="store", type="string", default="golconde.yaml", 
+                                help="Specify the configuration file to load.")
+
+# Parse our options and arguments                                    
+options, args = parser.parse_args()
+
+# Load the Configuration file
+try:
+    stream = file(options.config, 'r')
+    config = yaml.load(stream)
+except:
+    print "Invalid or missing configuration file: %s" % options.config
+    sys.exit(1)
+
+# Set logging levels dictionary
+logging_levels = {'debug': logging.DEBUG,
+                                    'info': logging.INFO,
+                                    'warning': logging.WARNING,
+                                    'error': logging.ERROR,
+                                    'critical': logging.CRITICAL}
+
+# Get the logging value from the dictionary
+logging_level = config['Logging']['level']
+config['Logging']['level'] = logging_levels.get(config['Logging']['level'], logging.NOTSET)
+
+# Pass in our logging config        
+logging.basicConfig(**config['Logging'])
+logging.info('Log level set to %s' % logging_level)
+
+# Main Thread Object for Stats
+threads = []
+
+# Loop through the destinations and kick off destination threads
+for (destination_name, destination_config) in config['Destinations'].items():
+
+    # Destination thread
+    logging.info('Starting new destination thread: %s' % destination_name)
+    thread = DestinationThread(destination_name, destination_config)
+    thread.setName(destination_name)
+    thread.start()
+    threads.append(thread)
+    
+    # Loop through the targets and kick off their threads
+    if destination_config.has_key('Targets'):
+        for ( target_name, target_config ) in destination_config['Targets'].items():
+            logging.info('Starting new target thread: %s' % target_name)
+            thread = TargetThread(target_name, target_config)
+            thread.setName('%s_%s' % (destination_name, target_name))
+            thread.start()
+            threads.append(thread)
+
+# Start the HTTP Server
+server = HTTPServer(('',8080),HTTPHandler)
+server.serve_forever()
+
+# Fork our process to detach if not told to stay in foreground
+if options.foreground is False:
+    print 'Golconde has started.'
     try:
-        stream = file(options.config, 'r')
-        config = yaml.load(stream)
-    except:
-        print "Invalid or missing configuration file: %s" % options.config
+        pid = os.fork()
+        if pid > 0:
+            logging.info('Parent process ending.')
+            sys.exit(0)            
+    except OSError, e:
+        sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
         sys.exit(1)
 
-    # Set logging levels dictionary
-    logging_levels = {'debug': logging.DEBUG,
-                                        'info': logging.INFO,
-                                        'warning': logging.WARNING,
-                                        'error': logging.ERROR,
-                                        'critical': logging.CRITICAL}
-
-    # Get the logging value from the dictionary
-    logging_level = config['Logging']['level']
-    config['Logging']['level'] = logging_levels.get(config['Logging']['level'], logging.NOTSET)
-
-    # Pass in our logging config        
-    logging.basicConfig(**config['Logging'])
-    logging.info('Log level set to %s' % logging_level)
-
-    # Fork our process to detach if not told to stay in foreground
-    if options.foreground is False:
-        print 'Golconde has started.'
-        try:
-            pid = os.fork()
-            if pid > 0:
-                logging.info('Parent process ending.')
-                sys.exit(0)            
-        except OSError, e:
-            sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
-            sys.exit(1)
-
-        # Detach from parent environment
-        os.chdir('/') 
-        os.setsid()
-        os.umask(0) 
-				
-        # redirect standard file descriptors
-        sys.stdout.flush()
-        sys.stderr.flush()
-        si = file('/dev/null', 'r')
-        so = file('/dev/null', 'a+')
-        se = file('/dev/null', 'a+', 0)
-        os.dup2(si.fileno(), sys.stdin.fileno())
-        os.dup2(so.fileno(), sys.stdout.fileno())
-        os.dup2(se.fileno(), sys.stderr.fileno())
-				
-        # Second fork to put into daemon mode
-        try: 
-            pid = os.fork() 
-            if pid > 0:
-                # exit from second parent, print eventual PID before
-                logging.info('Child forked as PID # %d' % pid)
-                sys.exit(0) 
-        except OSError, e: 
-            sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
-            sys.exit(1)
-
-    # Loop through the destinations and kick off destination threads
-    for (destination, destination_config) in config['Destinations'].items():
-        logging.info('Starting new destination thread: %s' % destination)
-        thread.start_new_thread(startDestinationThread,(destination, destination_config))
-        
-        # Loop through the targets and kick off their threads
-        if destination_config.has_key('Targets'):
-            for ( target_name, target_config ) in destination_config['Targets'].items():
-                logging.info('Starting new target thread: %s' % target_name)
-                thread.start_new_thread(startTargetThread,(target_name, target_config))
+    # Detach from parent environment
+    os.chdir('/') 
+    os.setsid()
+    os.umask(0) 
+			
+    # redirect standard file descriptors
+    sys.stdout.flush()
+    sys.stderr.flush()
+    si = file('/dev/null', 'r')
+    so = file('/dev/null', 'a+')
+    se = file('/dev/null', 'a+', 0)
+    os.dup2(si.fileno(), sys.stdin.fileno())
+    os.dup2(so.fileno(), sys.stdout.fileno())
+    os.dup2(se.fileno(), sys.stderr.fileno())
+			
+    # Second fork to put into daemon mode
+    try: 
+        pid = os.fork() 
+        if pid > 0:
+            # exit from second parent, print eventual PID before
+            logging.info('Child forked as PID # %d' % pid)
+            sys.exit(0) 
+    except OSError, e: 
+        sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
+        sys.exit(1)
     
-    """
-    Just have the main loop run in a low CPU utilization mode, but keep us running while
-    we receive messages from our Stomp server
-    """
-    while 1:
-        time.sleep(1)
-    
-if __name__ == "__main__":
-    main()
+"""
+Just have the main loop run in a low CPU utilization mode, but keep us running while
+we receive messages from our Stomp server
+"""
+while 1:
+    time.sleep(1)
