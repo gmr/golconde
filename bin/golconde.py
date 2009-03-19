@@ -17,6 +17,7 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 version = '0.6'
 
 class AutoSQL(object):
+
     """
     AutoSQL Class
 
@@ -442,6 +443,7 @@ class AutoSQL(object):
         return self.stats
 
 class DestinationHandler(object):
+
     """
     Destination Queue Listener
     
@@ -581,6 +583,13 @@ class TargetHandler(object):
         return self.message_processor.get_stats()        
 
 class HTTPHandler(BaseHTTPRequestHandler):
+
+    """
+    Internal HTTP Server Handler Class
+    
+    Sends out JSON stats data about internal state
+    """
+
     def do_GET(self):
         if self.path == '/stats':
             global threads
@@ -604,6 +613,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
 class DestinationThread(threading.Thread):
 
+    """
+    Destination Thread
+
+    Thread that creates our stomp connection and its DestinationHandler object    
+    """
+    
     def __init__(self, name, config):
         threading.Thread.__init__(self)
         
@@ -632,6 +647,12 @@ class DestinationThread(threading.Thread):
         return { self.name: self.handler.get_stats() }
         
 class TargetThread(threading.Thread):
+
+    """
+    Target Thread
+
+    Thread that creates our stomp connection and its TargetHandler object    
+    """
 
     def __init__(self, name, config):
         threading.Thread.__init__(self)
@@ -729,11 +750,9 @@ for (destination_name, destination_config) in config['Destinations'].items():
 
 # Start the HTTP Server
 server = HTTPServer(('',8080),HTTPHandler)
-server.serve_forever()
 
 # Fork our process to detach if not told to stay in foreground
 if options.foreground is False:
-    print 'Golconde has started.'
     try:
         pid = os.fork()
         if pid > 0:
@@ -763,6 +782,7 @@ if options.foreground is False:
         pid = os.fork() 
         if pid > 0:
             # exit from second parent, print eventual PID before
+            print 'Golconde has started - PID # %d.' % pid
             logging.info('Child forked as PID # %d' % pid)
             sys.exit(0) 
     except OSError, e: 
@@ -773,5 +793,9 @@ if options.foreground is False:
 Just have the main loop run in a low CPU utilization mode, but keep us running while
 we receive messages from our Stomp server
 """
+
+# @todo - When we fork into the background, the HTTP server doesn't behave.
+server.serve_forever()
+
 while 1:
     time.sleep(1)
