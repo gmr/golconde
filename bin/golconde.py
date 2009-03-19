@@ -591,8 +591,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
     """
 
     def do_GET(self):
-        if self.path == '/stats':
-            global threads
+        global threads
+
+        path = self.path.split('?')
+
+        if path[0] == '/stats':
             
             # Build a list of thread stats returns
             thread_stats = []
@@ -607,6 +610,23 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_header('X-Server', 'Golconde/%s' % version)
             self.end_headers()
             self.wfile.write(response)
+
+	elif path[0] == '/stats/jsonp':
+            
+            # Build a list of thread stats returns
+            thread_stats = []
+            for thread in threads:
+                thread_stats.append(thread.get_stats())
+            
+            stats = { 'worker_threads': len(threads), 'threads': thread_stats }           
+            response = "jsonp_stats(%s);\n" %  json.dumps(stats)
+            self.send_response(200)
+            self.send_header('Content-type','application/json')
+            self.send_header('Content-length', len(response))
+            self.send_header('X-Server', 'Golconde/%s' % version)
+            self.end_headers()
+            self.wfile.write(response)
+
         else:
             self.send_error(404, 'File not found: %s' % self.path)            
         return
@@ -749,7 +769,7 @@ for (destination_name, destination_config) in config['Destinations'].items():
             threads.append(thread)
 
 # Start the HTTP Server
-server = HTTPServer(('',8080),HTTPHandler)
+server = HTTPServer(('',8000),HTTPHandler)
 
 # Fork our process to detach if not told to stay in foreground
 if options.foreground is False:
