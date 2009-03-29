@@ -16,7 +16,7 @@ h1#logo {
 ul#config {
   clear: left;
   float: left;
-  width: 315px;
+  width: 350px;
   padding: 0 0 0 .25em;
   font-size: 14px;
 }
@@ -72,7 +72,7 @@ div#content {
   top: 0;
   position: absolute;
   margin: 100px 350px;
-  width: 675px;
+  width: 700px;
 }
 
 div#content h2 {
@@ -98,6 +98,7 @@ li.name {
 }
 
 li.graph {
+  margin-left: 10px;
   width: 600px;
   height: 275px;
   float: left;

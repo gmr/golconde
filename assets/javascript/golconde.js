@@ -27,7 +27,7 @@ function jsonp_config(result)
     $('#config').append('<li id="config_' + dkey + '"><a href"#' + dkey + '">Destination: ' + name + '</a></li>');  
     $('#config_' + dkey).append('<dl></dl>');
     $('#config_' + dkey + ' dl').append(
-      '<dt>stomp</dt><dd>' + child.stomp + '</dd>' + 
+      '<dt>broker</dt><dd>' + child.stomp + '</dd>' + 
       '<dt>queue</dt><dd>' + child.queue + '</dd>' + 
       '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
       '<dt>target</dt><dd>' + child.target + '</dd>' + 
@@ -55,7 +55,7 @@ function jsonp_config(result)
       p.append('<li id="config_' + tkey + '"><a href="#' + tkey + '">Target: ' + tname + '</a></li>');         
       $('#config_' + tkey).append('<dl></dl>');
       $('#config_' + tkey + ' dl').append(
-        '<dt>stomp</dt><dd>' + child.stomp + '</dd>' + 
+        '<dt>broker</dt><dd>' + child.stomp + '</dd>' + 
         '<dt>queue</dt><dd>' + child.queue + '</dd>' + 
         '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
         '<dt>target</dt><dd>' + child.target + '</dd>' + 
