@@ -1,0 +1,104 @@
+body {
+  background: #fff;
+  color: #000;
+  font-family: Verdana, Helvetica, Arial, Sans-Serif;
+}
+ 
+h1#logo {
+  width: 240px;
+  height: 152px;
+  background: url('/assets/graphics/logo.png');
+  text-indent: -9999em;
+  float: left;
+  margin-left: 50px;
+}
+ 
+ul#config {
+  clear: left;
+  float: left;
+  width: 315px;
+  padding: 0 0 0 .25em;
+  font-size: 14px;
+}
+
+ul#config li {
+  list-style: none;
+  padding-bottom: 0em;
+  font-weight: bold;
+  color: #7c230a;
+  clear: left; 
+}
+
+ul#config li a {
+  color: #7c230a; 
+  text-decoration: none;
+}
+
+ul#config ul {
+  clear: left;
+  padding: 0 0 0 2em;
+  margin: 0;
+  font-size: 12px;
+}
+
+ul#config ul li {
+  clear: left;
+  padding: 1em 0 .5em 0;
+  color: #888;
+}
+
+ul#config dl {
+  margin-top: 5px;
+  font-size: 10px;
+}
+
+ul#config dl dt {
+  width: 75px;
+  clear: left;
+  float: left;
+  font-weight: normal;
+  color: #7c230a;
+  margin: .25em 0 0 25px;
+}
+
+ul#config dl dd {
+  float: left;
+  color: #888;
+  margin: .25em 0;
+  font-weight: normal;
+}
+
+div#content {
+  top: 0;
+  position: absolute;
+  margin: 100px 350px;
+  width: 675px;
+}
+
+div#content h2 {
+  text-align: right;
+  font-size: 14px;
+  font-weight: normal;
+}
+
+ul#graphs {
+  margin-left: 50px;
+}
+
+ul#graphs li {
+  padding: 5px 0;
+  list-style: none;
+}
+
+li.name {
+  font-size: 14px;
+  color: #7c230a;
+  font-weight: bold;
+  font-style: italic;
+}
+
+li.graph {
+  width: 600px;
+  height: 275px;
+  float: left;
+}

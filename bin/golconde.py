@@ -11,7 +11,7 @@ actions.
 @requires Python 2.6
 """
 
-import logging, optparse, psycopg2, json, os, stomp, sys, thread, threading, time, yaml
+import json, logging, mimetypes, optparse, psycopg2, os, resource, stomp, sys, thread, threading, time, yaml
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 version = '0.6'
@@ -595,7 +595,52 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         path = self.path.split('?')
 
-        if path[0] == '/stats':
+        # Initial request for the stats ui
+        if path[0] == '/':
+            if os.path.isdir('assets'):
+                if os.path.isfile('assets/index.html'):
+                    f = open('assets/index.html', 'r')
+                    response = f.read()
+                    f.close()
+                    self.send_response(200)
+                    self.send_header('Content-type','text/html')
+                    self.send_header('Content-length', len(response))
+                    self.send_header('X-Server', 'Golconde/%s' % version)
+                    self.end_headers()
+                    self.wfile.write(response)                
+                else:
+                    self.send_response(404)
+            else:
+                self.send_response(404)
+            return
+        
+        if path[0].find('assets/') > 0:
+            if os.path.isdir('assets'):
+                if os.path.isfile(path[0][1:]):
+                  
+                    # Read in the file
+                    f = open(path[0][1:], 'r')
+                    response = f.read()
+                    f.close()
+    
+                    # Get the mime type                
+                    mime = mimetypes.guess_type(path[0][1:])
+                   
+                    # Send the response
+                    self.send_response(200)
+                    self.send_header('Content-type', mime)
+                    self.send_header('Content-length', len(response))
+                    self.send_header('X-Server', 'Golconde/%s' % version)
+                    self.end_headers()
+                    self.wfile.write(response)                
+                else:
+                    self.send_response(404)
+            else:
+                self.send_response(404)
+            return                            
+
+        # 3rd party stub for json data
+        elif path[0] == '/stats':
             
             # Build a list of thread stats returns
             thread_stats = []
@@ -610,8 +655,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_header('X-Server', 'Golconde/%s' % version)
             self.end_headers()
             self.wfile.write(response)
-
-	elif path[0] == '/stats/jsonp':
+            return
+            
+        # Make the UI work with jsonp so we can serve the UI from a real webserver
+        elif path[0] == '/stats/jsonp':
             
             # Build a list of thread stats returns
             thread_stats = []
@@ -626,6 +673,20 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_header('X-Server', 'Golconde/%s' % version)
             self.end_headers()
             self.wfile.write(response)
+            return
+            
+        # The running processes configuration
+        elif path[0] == '/config':
+            global config
+            
+            response = "jsonp_config(%s);\n" % json.dumps(config)
+            self.send_response(200)
+            self.send_header('Content-type','application/json')
+            self.send_header('Content-length', len(response))
+            self.send_header('X-Server', 'Golconde/%s' % version)
+            self.end_headers()
+            self.wfile.write(response)     
+            return       
 
         else:
             self.send_error(404, 'File not found: %s' % self.path)            
@@ -652,7 +713,7 @@ class DestinationThread(threading.Thread):
 
         # Create our Destination Handler Object    
         self.handler = DestinationHandler(self.name, self.config)
-        
+                
         # Get our host and port to listen on        
         (host,port) = self.config['stomp'].split(':')
         
@@ -715,7 +776,7 @@ parser.add_option("-f", "--foreground",
                                 help="Do not fork and stay in foreground")                                                                 
 parser.add_option("-v", "--verbose",
                                 action="store_true", dest="verbose", default=False,
-                                help="make lots of noise")
+                                help="use debug to stdout instead of logging settings")
 parser.add_option("-c", "--config", 
                                 action="store", type="string", default="golconde.yaml", 
                                 help="Specify the configuration file to load.")
@@ -742,9 +803,53 @@ logging_levels = {'debug': logging.DEBUG,
 logging_level = config['Logging']['level']
 config['Logging']['level'] = logging_levels.get(config['Logging']['level'], logging.NOTSET)
 
-# Pass in our logging config        
+# If the user says verbose overwrite the settings.
+if options.verbose is True:
+  if config['Logging']['filename']:
+    del config['Logging']['filename']
+  config['Logging']['level'] = logging.DEBUG
+
+# Pass in our logging config 
 logging.basicConfig(**config['Logging'])
 logging.info('Log level set to %s' % logging_level)
+
+# Start the HTTP Server
+server = HTTPServer((config['HTTPServer']['listen'],config['HTTPServer']['port']),HTTPHandler)
+
+# Fork our process to detach if not told to stay in foreground
+if options.foreground is False:
+    try:
+        pid = os.fork()
+        if pid > 0:
+            logging.info('Parent process ending.')
+            sys.exit(0)            
+    except OSError, e:
+        sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
+        sys.exit(1)
+
+    # Second fork to put into daemon mode
+    try: 
+        pid = os.fork() 
+        if pid > 0:
+            # exit from second parent, print eventual PID before
+            print 'Golconde has started - PID # %d.' % pid
+            logging.info('Child forked as PID # %d' % pid)
+            sys.exit(0) 
+    except OSError, e: 
+        sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
+        sys.exit(1)
+
+    # Detach from parent environment
+    os.chdir('/') 
+    os.setsid()
+    os.umask(0) 
+
+    # Close stdin    	
+    sys.stdin.close()
+    
+    # Redirect stdout, stderr
+    sys.stdout = open('http_access.log', 'w')
+    sys.stderr = open('http_errors.log', 'w')    
 
 # Main Thread Object for Stats
 threads = []
@@ -767,47 +872,6 @@ for (destination_name, destination_config) in config['Destinations'].items():
             thread.setName('%s_%s' % (destination_name, target_name))
             thread.start()
             threads.append(thread)
-
-# Start the HTTP Server
-server = HTTPServer(('',8000),HTTPHandler)
-
-# Fork our process to detach if not told to stay in foreground
-if options.foreground is False:
-    try:
-        pid = os.fork()
-        if pid > 0:
-            logging.info('Parent process ending.')
-            sys.exit(0)            
-    except OSError, e:
-        sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
-        sys.exit(1)
-
-    # Detach from parent environment
-    os.chdir('/') 
-    os.setsid()
-    os.umask(0) 
-			
-    # redirect standard file descriptors
-    sys.stdout.flush()
-    sys.stderr.flush()
-    si = file('/dev/null', 'r')
-    so = file('/dev/null', 'a+')
-    se = file('/dev/null', 'a+', 0)
-    os.dup2(si.fileno(), sys.stdin.fileno())
-    os.dup2(so.fileno(), sys.stdout.fileno())
-    os.dup2(se.fileno(), sys.stderr.fileno())
-			
-    # Second fork to put into daemon mode
-    try: 
-        pid = os.fork() 
-        if pid > 0:
-            # exit from second parent, print eventual PID before
-            print 'Golconde has started - PID # %d.' % pid
-            logging.info('Child forked as PID # %d' % pid)
-            sys.exit(0) 
-    except OSError, e: 
-        sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
-        sys.exit(1)
     
 """
 Just have the main loop run in a low CPU utilization mode, but keep us running while

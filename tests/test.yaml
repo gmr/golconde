@@ -4,7 +4,10 @@ Logging:
  filename: log.txt
  format: "%(levelname) -10s %(asctime)s %(message)s"
  # Valid values: debug, info, warning, error, critical
- level: error
+ level: debug
+HTTPServer:
+  listen: 127.0.0.1
+  port: 8000
 Destinations:
  Test1:
   stomp: localhost:61613
