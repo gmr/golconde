@@ -56,7 +56,7 @@ def main():
     # Randomly pick an action based upon if we've seen this item or not
     if (valueA,valueB) in r or (valueB,valueA) in r:
     
-      a = random.randint(2,3)
+      a = random.randint(1,3)
       # If it's a delete, remove it from the stack so we can act on it again
       if actions[a] == 'delete':
         if (valueA,valueB) in r:
@@ -67,13 +67,14 @@ def main():
         # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
         statement = json.dumps({'action': actions[a], 'restriction': {'user_id': valueA, 'friend_id': valueB}})
 
-      else:
+      elif actions[a] == 'update':
         # Update/Set Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
         statement = json.dumps({'action': actions[a], 'data': {'timestamp': time.asctime(), 'status_id': random.randint(1,3)}, 
                                 'restriction': {'user_id': valueA, 'friend_id': valueB}})
 
       # Append our stack with these users in case its a set so we know we can update them
-      if actions[a] == 'set':
+      elif actions[a] == 'set':
+        statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB, 'status_id': random.randint(0,3)}})
         r.append((valueA,valueB))
 
     else:
