@@ -33,7 +33,7 @@ $$
 # @summary Generic Golconde function enqueue data payloads
 # @since 2009-02-09
 # @author: Gavin M. Roy <gmr@myyearbook.com>
-import simplejson as json
+import json
 
 sql = "SELECT * FROM golconde.trigger_connections WHERE schema_name = '%s' AND table_name = '%s'" % ( TD['table_schema'], TD['table_name'] )
 result = plpy.execute(sql, 1)

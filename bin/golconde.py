@@ -379,7 +379,7 @@ class AutoSQL(object):
 
         elif message['action'] == 'update':
             
-            self.stats['delete'] += 1
+            self.stats['update'] += 1
                 
             # Create our empty lists
             restriction = []

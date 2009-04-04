@@ -33,7 +33,7 @@ port = 61613
 queue = '/queue/golconde.test2'
 
 # Imports
-import random, simplejson as json, stomp, time
+import random, json, stomp, time
 
 # Main function for command line execution
 def main():

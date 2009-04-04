@@ -14,13 +14,13 @@ Generate random Golconde Queue Messages for testing the various states and actio
 actions = ['add','set','update','delete']
 
 # Number of messages to limit to
-limit = 10000
+limit = 1000000
 
 # Min User ID
 min = 0
 
 # Max User ID
-max = 1000
+max = 150
 
 # ActiveMQ Server & Port
 server = '127.0.0.1'
@@ -55,7 +55,8 @@ def main():
 
     # Randomly pick an action based upon if we've seen this item or not
     if (valueA,valueB) in r or (valueB,valueA) in r:
-      a = random.randint(1,3)
+    
+      a = random.randint(2,3)
       # If it's a delete, remove it from the stack so we can act on it again
       if actions[a] == 'delete':
         if (valueA,valueB) in r:
@@ -67,17 +68,27 @@ def main():
         statement = json.dumps({'action': actions[a], 'restriction': {'user_id': valueA, 'friend_id': valueB}})
 
       else:
-        # Update Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
+        # Update/Set Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
         statement = json.dumps({'action': actions[a], 'data': {'timestamp': time.asctime(), 'status_id': random.randint(1,3)}, 
                                 'restriction': {'user_id': valueA, 'friend_id': valueB}})
+
+      # Append our stack with these users in case its a set so we know we can update them
+      if actions[a] == 'set':
+        r.append((valueA,valueB))
 
     else:
       # We're doing an insert
       r.append((valueA,valueB))
-      a = 0
+      a = random.randint(0,1)
 
-      # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
-      statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB, 'status_id': random.randint(0,3)}})
+      if actions[a] == 'add':
+        # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
+        statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB, 'status_id': random.randint(0,3)}})
+
+      if actions[a] == 'set':
+        # Build our Golconde Message, we should replace this with passing in the dictionary to a Golconde client function
+        statement = json.dumps({'action': actions[a], 'data': {'user_id': valueA, 'friend_id': valueB, 'status_id': random.randint(0,3)}})
+
     
     # Send the statement via Stomp, we should replace this to make it internal to the Golconde client function
     print 'Sending %s' % statement
