@@ -13,6 +13,7 @@ actions.
 
 import json, logging, mimetypes, optparse, psycopg2, os, resource, stomp, sys, thread, threading, time, yaml
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from SocketServer import ThreadingMixIn
 
 version = '0.6'
 
@@ -457,27 +458,31 @@ class DestinationHandler(object):
         self.function = config['function']
         self.target = config['target']
         self.name = name
+        self.connected = False
     
         # Try to connect to our PostgreSQL DSN
         try:
             # Connect to the databases
             self.pgsql = psycopg2.connect(config['pgsql'])
             self.pgsql.set_isolation_level(0)
+            self.connected = True
             
         # We encountered a problem
         except psycopg2.OperationalError, e:
 
             # Do string checks for various errors
             if 'Connection refused' in e[0]:
-                print "Error: Connection refusted to PostgreSQL for %s" % config.pgsql
-                sys.exit(1)
+                logging.error("Error: Connection refusted to PostgreSQL for %s" % config['pgsql'])
+                return
             
             if 'authentication failed' in e[0] or 'no password supplied' in e[0]:
-                print "Error: authentication failed"
-                sys.exit(1)
+                logging.error("Error: authentication failed")
+                return
             
             # Unhandled exception, let the user know and exit the program
-            raise
+            if 'does not exist' in e[0]:
+                logging.error("Error: Connection refusted to PostgreSQL for %s" % config['pgsql'])
+                return
             
         # Build our cursor to work with
         self.cursor = self.pgsql.cursor()
@@ -532,32 +537,40 @@ class TargetHandler(object):
     """
     
     def __init__(self,name, config):
+        global logging
+        
         # Set our values
         self.function = config['function']
         self.target = config['target']
         self.name = name
+        self.connected = False
     
         # Try to connect to our PostgreSQL DSN
         try:
             # Connect to the databases
             self.pgsql = psycopg2.connect(config['pgsql'])
             self.pgsql.set_isolation_level(0)
+            self.connected = True
             
         # We encountered a problem
         except psycopg2.OperationalError, e:
 
             # Do string checks for various errors
             if 'Connection refused' in e[0]:
-                print "Error: Connection refusted to PostgreSQL for %s" % config.pgsql
-                sys.exit(1)
-            
+                logging.error("Error: Connection refusted to PostgreSQL for %s" % config['pgsql'])
+                return
+             
             if 'authentication failed' in e[0] or 'no password supplied' in e[0]:
-                print "Error: authentication failed"
-                sys.exit(1)
-            
+                logging.error("Error: authentication failed")
+                return
+                
             # Unhandled exception, let the user know and exit the program
+            if 'does not exist' in e[0]:
+                logging.error("Error: Connection refusted to PostgreSQL for %s" % config['pgsql'])
+                return
+                
             raise
-            
+           
         # Build our cursor to work with
         self.cursor = self.pgsql.cursor()
         
@@ -591,12 +604,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
     """
 
     def do_GET(self):
-        global threads
+        global logging, threads
 
+        #Log our request to the debugging handler
+        logging.debug('Handling request: %s' % self.path)
+        
         path = self.path.split('?')
 
         # Initial request for the stats ui
         if path[0] == '/':
+            logging.debug('Serving /')
             if os.path.isdir('assets'):
                 if os.path.isfile('assets/index.html'):
                     f = open('assets/index.html', 'r')
@@ -707,12 +724,13 @@ class DestinationThread(threading.Thread):
         self.name = name
         self.config = config
 
+        # Create our Destination Handler Object    
+        self.handler = DestinationHandler(self.name, self.config)
+        self.connected = self.handler.connected
+
     def run(self):
         
         logging.info('Subscribing to Destination "%s" on queue: %s' % (self.name, self.config['queue']))
-
-        # Create our Destination Handler Object    
-        self.handler = DestinationHandler(self.name, self.config)
                 
         # Get our host and port to listen on        
         (host,port) = self.config['stomp'].split(':')
@@ -742,12 +760,13 @@ class TargetThread(threading.Thread):
         self.config = config    
         self.name = target_name
 
+        # Create our Target Handler Object
+        self.handler = TargetHandler(self.name, self.config)
+        self.connected = self.handler.connected
+
     def run(self):
     
         logging.info('Subscribing to Target "%s" on queue: %s' % (target_name, target_config['queue']))
-
-        # Create our Target Handler Object
-        self.handler = TargetHandler(self.name, self.config)
 
         # Get the host and port to listen on
         (host,port) = self.config['stomp'].split(':')
@@ -762,6 +781,9 @@ class TargetThread(threading.Thread):
     def get_stats(self):
         return { self.name: self.handler.get_stats() }
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in a separate thread."""
+  
 # Set our various display values for our Option Parser
 usage = "usage: %prog [options]"
 version_string = "%%prog %s" % version
@@ -805,16 +827,19 @@ config['Logging']['level'] = logging_levels.get(config['Logging']['level'], logg
 
 # If the user says verbose overwrite the settings.
 if options.verbose is True:
-  if config['Logging']['filename']:
-    del config['Logging']['filename']
-  config['Logging']['level'] = logging.DEBUG
-
+    if config['Logging']['filename']:
+        del config['Logging']['filename']
+    config['Logging']['level'] = logging.DEBUG
+else:
+    # Build a specific path to our log file
+    config['Logging']['filename'] = "%s/%s/%s" % ( 
+      config['Locations']['base'], 
+      config['Locations']['logs'], 
+      config['Logging']['filename'] )
+  
 # Pass in our logging config 
 logging.basicConfig(**config['Logging'])
 logging.info('Log level set to %s' % logging_level)
-
-# Start the HTTP Server
-server = HTTPServer((config['HTTPServer']['listen'],config['HTTPServer']['port']),HTTPHandler)
 
 # Fork our process to detach if not told to stay in foreground
 if options.foreground is False:
@@ -839,6 +864,8 @@ if options.foreground is False:
         sys.stderr.write("Could not fork: %d (%s)\n" % (e.errno, e.strerror))
         sys.exit(1)
 
+    logging.debug('After child fork')
+
     # Detach from parent environment
     os.chdir('/') 
     os.setsid()
@@ -848,38 +875,45 @@ if options.foreground is False:
     sys.stdin.close()
     
     # Redirect stdout, stderr
-    sys.stdout = open('http_access.log', 'w')
-    sys.stderr = open('http_errors.log', 'w')    
+    sys.stdout = open('%s/%s/stdout.log' % ( config['Locations']['base'], config['Locations']['logs']), 'w')
+    sys.stderr = open('%s/%s/stderr.log' % ( config['Locations']['base'], config['Locations']['logs']), 'w')    
 
 # Main Thread Object for Stats
 threads = []
+
+logging.debug('Kicking off threads')
 
 # Loop through the destinations and kick off destination threads
 for (destination_name, destination_config) in config['Destinations'].items():
 
     # Destination thread
-    logging.info('Starting new destination thread: %s' % destination_name)
+    logging.info('Creating new destination thread: %s' % destination_name)
     thread = DestinationThread(destination_name, destination_config)
+    logging.debug('Starting thread: %s' % destination_name)
     thread.setName(destination_name)
     thread.start()
-    threads.append(thread)
+    if thread.connected is True:
+        threads.append(thread)
     
     # Loop through the targets and kick off their threads
     if destination_config.has_key('Targets'):
         for ( target_name, target_config ) in destination_config['Targets'].items():
-            logging.info('Starting new target thread: %s' % target_name)
+            logging.info('Creating new target thread: %s' % target_name)
             thread = TargetThread(target_name, target_config)
+            logging.debug('Starting thread: %s' % target_name)
             thread.setName('%s_%s' % (destination_name, target_name))
             thread.start()
-            threads.append(thread)
+            if thread.connected is True:
+                threads.append(thread)
     
-"""
-Just have the main loop run in a low CPU utilization mode, but keep us running while
-we receive messages from our Stomp server
-"""
-
-# @todo - When we fork into the background, the HTTP server doesn't behave.
-server.serve_forever()
-
-while 1:
-    time.sleep(1)
+# Start the HTTP Server
+if config['HTTPServer']['enabled'] is True:
+    server = ThreadedHTTPServer((config['HTTPServer']['listen'],config['HTTPServer']['port']), HTTPHandler)
+    server.serve_forever()
+else:
+    """
+    Just have the main loop run in a low CPU utilization mode, but keep us running while
+    we receive messages from our Stomp server
+    """
+    while 1:
+        time.sleep(1)
