@@ -29,7 +29,6 @@ function jsonp_config(result)
       $('#config_' + dkey + ' dl').append(
         '<dt>broker</dt><dd>' + child.stomp + '</dd>' + 
         '<dt>queue</dt><dd>' + child.queue + '</dd>' + 
-//        '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
         '<dt>target</dt><dd>' + child.target + '</dd>' + 
         '<dt>function</dt><dd>' + child.function_name + '</dd>');
 
@@ -65,7 +64,6 @@ function jsonp_config(result)
           $('#config_' + tkey + ' dl').append(
             '<dt>broker</dt><dd>' + child.stomp + '</dd>' + 
             '<dt>queue</dt><dd>' + child.queue + '</dd>' + 
-//            '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
             '<dt>target</dt><dd>' + child.target + '</dd>' + 
             '<dt>function</dt><dd>' + child.function_name + '</dd>');
           if ( child.enabled === true )
