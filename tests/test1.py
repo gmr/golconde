@@ -14,7 +14,7 @@ Generate random Golconde Queue Messages for testing the various states and actio
 actions = ['add','set','update','delete']
 
 # Number of messages to limit to
-limit = 10000000
+limit = 10000
 
 # Min User ID
 min = 0

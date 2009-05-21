@@ -32,7 +32,7 @@ function jsonp_config(result)
         '<dt>target</dt><dd>' + child.target + '</dd>' + 
         '<dt>function</dt><dd>' + child.function_name + '</dd>');
 
-      if ( child.enabled != true )
+      if ( child.enabled !== true )
       {
         $('#config_' + dkey + ' dl').append('<dt>Status</dt><dd class="error">Disabled</dd>');    
       } else {
@@ -82,14 +82,15 @@ function golconde_init()
 {
   $.ajax({
     dataType: 'jsonp',
-    url: 'http://localhost:8000/config',});
+    url: 'http://localhost:8000/config'
+  });
 }
 
 function getData()
 {
   $.ajax({
     dataType: 'jsonp',
-    url: 'http://localhost:8000/stats/jsonp',
+    url: 'http://localhost:8000/stats/jsonp'
   });      
 }      
 
@@ -104,12 +105,12 @@ function jsonp_stats(data)
   for ( var y = 0; y < data.threads.length; y++ )
   {
     $.each(data.threads[y], function(name, values){
-      if (first[name] != true)
+      if (first[name] !== true)
       {      
         for ( var z = 0; z < keys.length; z++ )
         {
           data_values[name][keys[z]].push([getTime(),(values[keys[z]] - last_values[name][keys[z]])]);
-          if ( data_values[name][keys[z]].length > 300 ) data_values[name][keys[z]].shift();
+          if ( data_values[name][keys[z]].length > 300 ) { data_values[name][keys[z]].shift(); }
         }
       }
       id = '#' + name;   
@@ -121,12 +122,12 @@ function jsonp_stats(data)
         {data: data_values[name]['update'],label: 'Update',lines:{show:true}}
        ],{ borderWidth: '1px', xaxis: {mode: "time"}, yaxis: {label: 'Commands'}, legend: { position: "ne", borderWidth: '1px' }} 
       );
-      if ( first[name] == true) first[name] = false;   
+      if ( first[name] == true) { first[name] = false; }   
       for ( var z = 0; z < keys.length; z++ )
       {
         last_values[name][keys[z]] = values[keys[z]];
       }
     });
   }
- if ( stop != true ) setTimeout("getData()", 1000);
+ if ( stop !== true ) { setTimeout(getData, 1000); }
 }

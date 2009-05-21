@@ -619,6 +619,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def send_data(self, response, mimetype):
         global version
         
+        logging.debug('Sending response to request for: %s' % self.path)
         self.send_response(200)
         self.send_header('X-Server', 'Golconde/%s' % version)
         self.send_header('Content-type', mimetype)
@@ -630,6 +631,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         global threads
 
         path = self.path.split('?')
+        logging.debug('Received request for %s' % self.path)
 
         # Initial request for the stats ui
         if path[0] == '/':
@@ -868,7 +870,7 @@ if options.foreground is False:
     logging.debug('After child fork')
 
     # Detach from parent environment
-    os.chdir('/') 
+    os.chdir(config['Locations']['base']) 
     os.setsid()
     os.umask(0) 
 
@@ -915,6 +917,7 @@ for (destination_name, destination_config) in config['Destinations'].items():
     
 # Start the HTTP Server
 if config['HTTPServer']['enabled'] is True:
+    logging.info('Starting HTTP Server')
     server = ThreadedHTTPServer((config['HTTPServer']['listen'],config['HTTPServer']['port']), HTTPHandler)
     server.serve_forever()
 else:
