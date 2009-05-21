@@ -24,53 +24,66 @@ function jsonp_config(result)
     }     
     
     // Output our HTML additions
-    $('#config').append('<li id="config_' + dkey + '"><a href"#' + dkey + '">Destination: ' + name + '</a></li>');  
-    $('#config_' + dkey).append('<dl></dl>');
-    $('#config_' + dkey + ' dl').append(
-      '<dt>broker</dt><dd>' + child.stomp + '</dd>' + 
-      '<dt>queue</dt><dd>' + child.queue + '</dd>' + 
-      '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
-      '<dt>target</dt><dd>' + child.target + '</dd>' + 
-      '<dt>function</dt><dd>' + child.function + '</dd>');
-    // Graph area
-    $('#graphs').append('<li class="name"><a name="' + dkey + '">' + name + '</a></li>\n<li id="' + dkey + '" class="graph"></li>');  
-    $('#config_' + dkey).append('<ul></ul>');   
-    
-    // Process the targets 
-    p = $('#config_' + dkey + ' ul');
-    $.each(child.Targets, function(tname, child){
-      tkey = dkey + '_' + tname;
-
-      // Setup our internal arrays
-      first[tkey] = true;
-      last_values[tkey] = new Object();
-      data_values[tkey] = new Object();
-      for ( var y = 0; y < keys.length; y++ )
-      {
-        last_values[tkey][keys[y]] = 0;
-        data_values[tkey][keys[y]] = new Array();
-      }     
-      
-      // Append the HTML      
-      p.append('<li id="config_' + tkey + '"><a href="#' + tkey + '">Target: ' + tname + '</a></li>');         
-      $('#config_' + tkey).append('<dl></dl>');
-      $('#config_' + tkey + ' dl').append(
+    $('#config').append('<li id="config_' + dkey + '"><a href"#' + dkey + '">Destination: ' + name + '</a></li>');
+      $('#config_' + dkey).append('<dl></dl>');
+      $('#config_' + dkey + ' dl').append(
         '<dt>broker</dt><dd>' + child.stomp + '</dd>' + 
         '<dt>queue</dt><dd>' + child.queue + '</dd>' + 
-        '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
+//        '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
         '<dt>target</dt><dd>' + child.target + '</dd>' + 
-        '<dt>function</dt><dd>' + child.function + '</dd>');
-      $('#graphs').append('<li class="name"><a name="' + tkey + '">' + name + ' - ' + tname + '</a></li>\n<li id="' + tkey + '" class="graph"></li>');  
-    });
+        '<dt>function</dt><dd>' + child.function_name + '</dd>');
+
+      if ( child.enabled != true )
+      {
+        $('#config_' + dkey + ' dl').append('<dt>Status</dt><dd class="error">Disabled</dd>');    
+      } else {
+        $('#config_' + dkey + ' dl').append('<dt>Status</dt><dd>Enabled</dd>');    
+      }
+
+      // Graph area
+      $('#graphs').append('<li class="name"><a name="' + dkey + '">' + name + '</a></li>\n<li id="' + dkey + '" class="graph"></li>');  
+      $('#config_' + dkey).append('<ul></ul>');   
+    
+      // Process the targets 
+      p = $('#config_' + dkey + ' ul');
+      $.each(child.Targets, function(tname, child){
+        tkey = dkey + '_' + tname;
+  
+        // Setup our internal arrays
+        first[tkey] = true;
+        last_values[tkey] = new Object();
+        data_values[tkey] = new Object();
+        for ( var y = 0; y < keys.length; y++ )
+        {
+          last_values[tkey][keys[y]] = 0;
+          data_values[tkey][keys[y]] = new Array();
+        }     
+        
+        // Append the HTML      
+        p.append('<li id="config_' + tkey + '"><a href="#' + tkey + '">Target: ' + tname + '</a></li>');
+          $('#config_' + tkey).append('<dl></dl>');
+          $('#config_' + tkey + ' dl').append(
+            '<dt>broker</dt><dd>' + child.stomp + '</dd>' + 
+            '<dt>queue</dt><dd>' + child.queue + '</dd>' + 
+//            '<dt>pgsql</dt><dd>' + child.pgsql + '</dd>' +
+            '<dt>target</dt><dd>' + child.target + '</dd>' + 
+            '<dt>function</dt><dd>' + child.function_name + '</dd>');
+          if ( child.enabled === true )
+          {
+            $('#config_' + tkey + ' dl').append('<dt>Status</dt><dd>Enabled</dd>');    
+          } else {
+            $('#config_' + tkey + ' dl').append('<dt>Status</dt><dd class="error">Disabled</dd>');    
+          }
+          $('#graphs').append('<li class="name"><a name="' + tkey + '">' + name + ' - ' + tname + '</a></li>\n<li id="' + tkey + '" class="graph"></li>');  
+      });
   });
   getData();
 }
 
-function init()
+function golconde_init()
 {
   $.ajax({
     dataType: 'jsonp',
-    jsonp: 'plot',
     url: 'http://localhost:8000/config',});
 }
 
@@ -78,7 +91,6 @@ function getData()
 {
   $.ajax({
     dataType: 'jsonp',
-    jsonp: 'plot',
     url: 'http://localhost:8000/stats/jsonp',
   });      
 }      

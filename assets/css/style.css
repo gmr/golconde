@@ -23,7 +23,7 @@ ul#config {
 
 ul#config li {
   list-style: none;
-  padding-bottom: 0em;
+  padding-top: 1em;
   font-weight: bold;
   color: #7c230a;
   clear: left; 

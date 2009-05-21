@@ -455,9 +455,10 @@ class DestinationHandler(object):
     def __init__(self,name, config):
 
         # Set our values
-        self.function = config['function']
+        self.function = config['function_name']
         self.target = config['target']
         self.name = name
+        self.config = config
         self.connected = False
     
         # Try to connect to our PostgreSQL DSN
@@ -497,22 +498,31 @@ class DestinationHandler(object):
                 print 'Undefined Destination Authorative Processing Function: %s' % self.function
                 sys.exit(1)
         
+    def connect(self):
+    
+        logging.debug('In DestinationHandler connect()')
+    
         # Variables to Connect to our Target stomp connections
         self.connections = 0
         self.destination_queue = []
         self.destination_connections = []
         
         # Connect for sending messages
-        if config.has_key('Targets'):
-            for (target_name, target_config) in config['Targets'].items():
+        logging.debug('Adding targets')
+        if self.config.has_key('Targets'):
+            for (target_name, target_config) in self.config['Targets'].items():
+                logging.debug("Connecting to destination connection target: %s" % target_name)
                 self.destination_queue.append(target_config['queue'])
                 (host,port) = target_config['stomp'].split(':')
                 self.destination_connections.append(stomp.Connection([(host,int(port))]))
                 self.destination_connections[self.connections].start()
                 self.destination_connections[self.connections].connect()
                 self.connections += 1
-                    
+                                        
         logging.info('Destination Initialized')
+
+    def on_connected(self, header, body):
+        logging.info('Stomp Queue Connected on DestinationHandler, Session ID %s' % header['session'])
 
     def on_error(self, headers, message):
         log.error('Destination received an error from AMQ: %s' % message)
@@ -540,7 +550,7 @@ class TargetHandler(object):
         global logging
         
         # Set our values
-        self.function = config['function']
+        self.function = config['function_name']
         self.target = config['target']
         self.name = name
         self.connected = False
@@ -586,8 +596,11 @@ class TargetHandler(object):
                 
         logging.info('Target Initialized')
 
+    def on_connected(self, header, body):
+        logging.info('Stomp Queue Connected on TargetHandler, Session ID %s' % header['session'])
+
     def on_error(self, headers, message):
-        log.error('Target received an error from AMQ: %s' % message)
+        logging.error('Target received an error from AMQ: %s' % message)
 
     def on_message(self, headers, message_in):
         self.message_processor.process(json.loads(message_in))
@@ -603,28 +616,29 @@ class HTTPHandler(BaseHTTPRequestHandler):
     Sends out JSON stats data about internal state
     """
 
-    def do_GET(self):
-        global logging, threads
-
-        #Log our request to the debugging handler
-        logging.debug('Handling request: %s' % self.path)
+    def send_data(self, response, mimetype):
+        global version
         
+        self.send_response(200)
+        self.send_header('X-Server', 'Golconde/%s' % version)
+        self.send_header('Content-type', mimetype)
+        self.send_header('Content-length', len(response))
+        self.end_headers()
+        self.wfile.write(response)                
+    
+    def do_GET(self):
+        global threads
+
         path = self.path.split('?')
 
         # Initial request for the stats ui
         if path[0] == '/':
-            logging.debug('Serving /')
             if os.path.isdir('assets'):
                 if os.path.isfile('assets/index.html'):
                     f = open('assets/index.html', 'r')
                     response = f.read()
-                    f.close()
-                    self.send_response(200)
-                    self.send_header('Content-type','text/html')
-                    self.send_header('Content-length', len(response))
-                    self.send_header('X-Server', 'Golconde/%s' % version)
-                    self.end_headers()
-                    self.wfile.write(response)                
+                    f.close()              
+                    self.send_data(response, 'text/html')      
                 else:
                     self.send_response(404)
             else:
@@ -644,12 +658,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     mime = mimetypes.guess_type(path[0][1:])
                    
                     # Send the response
-                    self.send_response(200)
-                    self.send_header('Content-type', mime)
-                    self.send_header('Content-length', len(response))
-                    self.send_header('X-Server', 'Golconde/%s' % version)
-                    self.end_headers()
-                    self.wfile.write(response)                
+                    self.send_data(response, mime[0])
                 else:
                     self.send_response(404)
             else:
@@ -665,13 +674,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 thread_stats.append(thread.get_stats())
             
             stats = { 'worker_threads': len(threads), 'threads': thread_stats }           
-            response = json.dumps(stats) + "\n"
-            self.send_response(200)
-            self.send_header('Content-type','application/json')
-            self.send_header('Content-length', len(response))
-            self.send_header('X-Server', 'Golconde/%s' % version)
-            self.end_headers()
-            self.wfile.write(response)
+            self.send_data(json.dumps(stats), 'application/json')
             return
             
         # Make the UI work with jsonp so we can serve the UI from a real webserver
@@ -684,25 +687,15 @@ class HTTPHandler(BaseHTTPRequestHandler):
             
             stats = { 'worker_threads': len(threads), 'threads': thread_stats }           
             response = "jsonp_stats(%s);\n" %  json.dumps(stats)
-            self.send_response(200)
-            self.send_header('Content-type','application/json')
-            self.send_header('Content-length', len(response))
-            self.send_header('X-Server', 'Golconde/%s' % version)
-            self.end_headers()
-            self.wfile.write(response)
+            self.send_data(response, 'text/javascript')
             return
             
         # The running processes configuration
         elif path[0] == '/config':
             global config
-            
+
             response = "jsonp_config(%s);\n" % json.dumps(config)
-            self.send_response(200)
-            self.send_header('Content-type','application/json')
-            self.send_header('Content-length', len(response))
-            self.send_header('X-Server', 'Golconde/%s' % version)
-            self.end_headers()
-            self.wfile.write(response)     
+            self.send_data(response, 'text/javascript')
             return       
 
         else:
@@ -730,18 +723,26 @@ class DestinationThread(threading.Thread):
 
     def run(self):
         
-        logging.info('Subscribing to Destination "%s" on queue: %s' % (self.name, self.config['queue']))
-                
-        # Get our host and port to listen on        
-        (host,port) = self.config['stomp'].split(':')
+        if self.connected is True:
+          logging.info('Subscribing to Destination "%s" on queue: %s' % (self.name, self.config['queue']))
+                  
+          # Get our host and port to listen on        
+          (host,port) = self.config['stomp'].split(':')
+          
+          # Connect to our stomp listener for the Destination
+          destination_connection = stomp.Connection([(host,int(port))])
+          destination_connection.add_listener(self.handler)
+          destination_connection.start()
+          destination_connection.connect()
+          destination_connection.subscribe(destination=self.config['queue'],ack='auto')
         
-        # Connect to our stomp listener for the Destination
-        destination_connection = stomp.Connection([(host,int(port))])
-        destination_connection.add_listener(self.handler)
-        destination_connection.start()
-        destination_connection.connect()
-        destination_connection.subscribe(destination=self.config['queue'],ack='auto')
-
+        else:
+          logging.info('Destination %s is disabled.' % self.name)
+      
+    def connect(self):
+        # Connect our handler
+        self.handler.connect()
+            
     def get_stats(self):
         return { self.name: self.handler.get_stats() }
         
@@ -881,30 +882,36 @@ if options.foreground is False:
 # Main Thread Object for Stats
 threads = []
 
-logging.debug('Kicking off threads')
-
 # Loop through the destinations and kick off destination threads
+logging.debug('Kicking off threads')
 for (destination_name, destination_config) in config['Destinations'].items():
 
     # Destination thread
     logging.info('Creating new destination thread: %s' % destination_name)
-    thread = DestinationThread(destination_name, destination_config)
+    destination_thread = DestinationThread(destination_name, destination_config)
     logging.debug('Starting thread: %s' % destination_name)
-    thread.setName(destination_name)
-    thread.start()
-    if thread.connected is True:
-        threads.append(thread)
+    destination_thread.setName(destination_name)
+    destination_thread.start()
+    config['Destinations'][destination_name]['enabled'] = destination_thread.connected;
+
+    # If our source is connected loop through the rest    
+    if destination_thread.connected is True:
+        threads.append(destination_thread)
     
-    # Loop through the targets and kick off their threads
-    if destination_config.has_key('Targets'):
-        for ( target_name, target_config ) in destination_config['Targets'].items():
-            logging.info('Creating new target thread: %s' % target_name)
-            thread = TargetThread(target_name, target_config)
-            logging.debug('Starting thread: %s' % target_name)
-            thread.setName('%s_%s' % (destination_name, target_name))
-            thread.start()
-            if thread.connected is True:
-                threads.append(thread)
+        # Loop through the targets and kick off their threads
+        if destination_config.has_key('Targets'):
+            for ( target_name, target_config ) in destination_config['Targets'].items():
+                logging.info('Creating new target thread: %s' % target_name)
+                thread = TargetThread(target_name, target_config)
+                logging.debug('Starting thread: %s' % target_name)
+                thread.setName('%s_%s' % (destination_name, target_name))
+                thread.start()
+                if thread.connected is True:
+                    threads.append(thread)
+                config['Destinations'][destination_name]['Targets'][target_name]['enabled'] = thread.connected;
+              
+    # Now that we've setup our targets, connect to our parent queue and start working
+    destination_thread.connect()    
     
 # Start the HTTP Server
 if config['HTTPServer']['enabled'] is True:

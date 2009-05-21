@@ -19,7 +19,7 @@ Destinations:
   pgsql: host=localhost user=gmr dbname=gmr
   # If you exclude the schema, it will default to public
   target: friendships
-  function: AutoSQL
+  function_name: AutoSQL
   Targets:
    target1:
     stomp: localhost:61613
@@ -27,20 +27,20 @@ Destinations:
     pgsql: host=localhost user=gmr dbname=destination
     # Schema.Relation format
     target: public.friendships
-    function: AutoSQL
+    function_name: AutoSQL
    target2:
     stomp: localhost:61613
     queue: /queue/golconde.test1.target2
     pgsql: host=localhost user=gmr dbname=destination_two
     target: public.friendships
-    function: AutoSQL    
+    function_name: AutoSQL    
  Test2:
   stomp: localhost:61613
   queue: /queue/golconde.test2
   pgsql: host=localhost user=gmr dbname=gmr
   # If you exclude the schema, it will default to public
   target: surrogate_test
-  function: AutoSQL
+  function_name: AutoSQL
   Targets:
    target1:
     stomp: localhost:61613
@@ -48,11 +48,11 @@ Destinations:
     pgsql: host=localhost user=gmr dbname=destination
     # Schema.Relation format
     target: public.surrogate_test
-    function: AutoSQL
+    function_name: AutoSQL
    target2:
     stomp: localhost:61613
     queue: /queue/golconde.test2.target2
     pgsql: host=localhost user=gmr dbname=destination_two
     target: public.surrogate_test
-    function: AutoSQL    
+    function_name: AutoSQL    
 ...
